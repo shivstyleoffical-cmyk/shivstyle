@@ -6,5 +6,5 @@ Disallow: /checkout
 Disallow: /order-success
 Disallow: /order-failure
 
-# Sitemap (Replace with production domain once deployed)
-Sitemap: https://shivstyle.com/sitemap.xml
+# Sitemap
+Sitemap: https://www.shivstyles.in/sitemap.xml

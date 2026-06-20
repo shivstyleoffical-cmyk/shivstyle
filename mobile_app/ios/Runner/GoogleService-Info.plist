@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>API_KEY</key>
+	<string>AIzaSyB3TS62UIIogsrlO6dlVObr3zObeO9ctUk</string>
+	<key>GCM_SENDER_ID</key>
+	<string>1030885485924</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>BUNDLE_ID</key>
+	<string>com.kalimgo.ecommerce</string>
+	<key>PROJECT_ID</key>
+	<string>shivent-f2e90</string>
+	<key>STORAGE_BUCKET</key>
+	<string>shivent-f2e90.firebasestorage.app</string>
+	<key>IS_ADS_ENABLED</key>
+	<false/>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false/>
+	<key>IS_APPINVITE_ENABLED</key>
+	<true/>
+	<key>IS_GCM_ENABLED</key>
+	<true/>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true/>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:1030885485924:ios:c3b08b63ee3cf8f0e45e71</string>
+	<key>DATABASE_URL</key>
+	<string>https://shivent-f2e90-default-rtdb.asia-southeast1.firebasedatabase.app</string>
+</dict>
+</plist>

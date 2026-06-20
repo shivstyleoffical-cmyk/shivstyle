@@ -1,0 +1,28 @@
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700;800;900&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --color-brand-primary: #09090b;
+  --color-brand-accent: #dc2626; /* Red */
+  --color-brand-secondary: #f97316; /* Orange */
+  
+  /* Using Montserrat for a consistent, premium geometric sans-serif look like the logo */
+  --font-sans: 'Montserrat', system-ui, sans-serif;
+}
+
+@layer base {
+  :root {
+    background-color: #ffffff;
+    color: #09090b;
+  }
+  
+  body {
+    margin: 0;
+    min-width: 320px;
+    min-height: 100vh;
+    overflow-x: hidden;
+    font-family: 'Montserrat', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}

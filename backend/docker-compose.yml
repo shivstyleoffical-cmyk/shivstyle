@@ -1,0 +1,44 @@
+services:
+  # Development Database - PostgreSQL
+  db-dev:
+    image: public.ecr.aws/docker/library/postgres:16-alpine
+    container_name: ecommerce-db-dev
+    restart: always
+    environment:
+      POSTGRES_USER: ecommerce_user
+      POSTGRES_PASSWORD: ecommerce_password
+      POSTGRES_DB: ecommerce_db_dev
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ecommerce_user -d ecommerce_db_dev"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Production Database - PostgreSQL
+  db-prod:
+    image: public.ecr.aws/docker/library/postgres:16-alpine
+    container_name: ecommerce-db-prod
+    restart: always
+    environment:
+      POSTGRES_USER: ecommerce_user
+      POSTGRES_PASSWORD: ecommerce_password
+      POSTGRES_DB: ecommerce_db_prod
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_prod_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ecommerce_user -d ecommerce_db_prod"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_dev_data:
+  postgres_prod_data:

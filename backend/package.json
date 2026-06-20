@@ -1,0 +1,47 @@
+{
+  "name": "backend",
+  "version": "1.0.0",
+  "description": "backend ecommerce",
+  "main": "src/app/server.js",
+  "type": "module",
+  "scripts": {
+    "dev": "cross-env NODE_ENV=development  nodemon src/app/server.js",
+    "start": "cross-env NODE_ENV=production node src/app/server.js",
+    "test": "cross-env NODE_ENV=test nodemon src/app/server.js",
+    "migrate": "npx sequelize-cli db:migrate",
+    "migrate:undo": "npx sequelize-cli db:migrate:undo",
+    "seed": "npx sequelize-cli db:seed:all",
+    "seed:prod": "cross-env NODE_ENV=production node seed_database.js",
+    "seed:undo": "npx sequelize-cli db:seed:undo:all"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^1.10.0",
+    "bcryptjs": "^3.0.2",
+    "cloudinary": "^2.7.0",
+    "cors": "^2.8.5",
+    "cross-env": "^7.0.3",
+    "crypto": "^1.0.1",
+    "dotenv": "^16.5.0",
+    "express": "^4.21.2",
+    "express-fileupload": "^1.5.1",
+    "express-rate-limit": "^7.5.0",
+    "express-validator": "^7.2.1",
+    "jsonwebtoken": "^9.0.2",
+    "morgan": "^1.10.0",
+    "multer": "^2.0.1",
+    "pg": "^8.11.3",
+    "pg-hstore": "^2.3.4",
+    "nodemailer": "^7.0.3",
+    "nodemon": "^3.1.10",
+    "razorpay": "^2.9.6",
+    "sequelize": "^6.37.7",
+    "twilio": "^5.7.2",
+    "uuid": "^9.0.1",
+    "winston": "^3.17.0"
+  },
+  "devDependencies": {
+    "sequelize-cli": "^6.6.5"
+  }
+}

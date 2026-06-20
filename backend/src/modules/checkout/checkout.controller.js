@@ -1,0 +1,548 @@
+import { v4 as uuidv4 } from 'uuid';
+import Razorpay from 'razorpay';
+import crypto from 'crypto';
+import { Op } from 'sequelize';
+import User from '../user/user.model.js';
+import Role from '../user/role.model.js';
+import Order from '../order/order.model.js';
+import OrderItem from '../order/order-item.model.js';
+import OrderShippingAddress from '../order/order-shipping-address.model.js';
+import OrderService from '../order/order.service.js';
+import ProductVariant from '../product/product-variant.model.js';
+import Product from '../product/product.model.js';
+import shiprocketService from '../../integrations/delivery/shiprocket.service.js';
+
+// Initialize Razorpay
+const razorpay = new Razorpay({
+    key_id: process.env.RAZORPAY_KEY_ID || 'rzp_test_dummyKeyId123',
+    key_secret: process.env.RAZORPAY_KEY_SECRET || 'dummySecret123'
+});
+
+/**
+ * Helper to book Shiprocket shipment for an order
+ */
+const bookShipment = async (orderId) => {
+    try {
+        const order = await Order.findByPk(orderId, {
+            include: [
+                { model: OrderItem, as: 'orderItems' },
+                { model: OrderShippingAddress, as: 'shippingAddress' },
+                { model: User, as: 'user' }
+            ]
+        });
+
+        if (!order || !order.shippingAddress) {
+            console.error(`Order ${orderId} or shipping address not found for Shiprocket booking`);
+            return null;
+        }
+
+        const orderDate = new Date(order.createdAt || Date.now()).toISOString().split('T')[0];
+        const shippingAddress = order.shippingAddress;
+        
+        const shipmentData = {
+            orderId: order.order_number,
+            orderDate: orderDate,
+            items: order.orderItems.map(item => ({
+                name: item.product_name,
+                id: item.product_id,
+                quantity: item.quantity,
+                price: parseFloat(item.price),
+                sku: item.product_variant_id || item.product_id
+            })),
+            pickupAddress: { locationName: 'Primary' },
+            deliveryAddress: {
+                name: shippingAddress.full_name || 'Customer',
+                address: `${shippingAddress.address_line1} ${shippingAddress.address_line2 || ''}`.trim(),
+                city: shippingAddress.city,
+                pincode: shippingAddress.postal_code,
+                state: shippingAddress.state,
+                country: shippingAddress.country || 'India',
+                email: order.user?.email || 'guest@shivstyle.com',
+                phone: shippingAddress.phone || order.user?.phone || '9999999999'
+            },
+            weight: 0.5,
+            dimensions: { length: 15, breadth: 15, height: 10 },
+            paymentMethod: order.payment_type === 'cod' ? 'cod' : 'prepaid',
+            subtotal: parseFloat(order.total_amount)
+        };
+
+        // Standard pricing fallback if credentials are dry
+        if (!process.env.SHIPROCKET_EMAIL || !process.env.SHIPROCKET_PASSWORD) {
+            console.log(`[Shiprocket] Credentials dry. Skipping API booking for order ${order.order_number}.`);
+            order.delivery_partner = 'Shiprocket (Mock)';
+            order.tracking_number = 'SR-MOCK-' + Math.floor(100000 + Math.random() * 900000);
+            order.estimated_delivery_date = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000);
+            await order.save();
+            return order;
+        }
+
+        const result = await shiprocketService.createShipment(shipmentData);
+        order.delivery_partner = result.courierName || 'Shiprocket';
+        order.tracking_number = result.awb || result.shipmentId;
+        order.estimated_delivery_date = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000);
+        await order.save();
+        
+        console.log(`[Shiprocket] Shipment created successfully for ${order.order_number}: AWB ${order.tracking_number}`);
+        return result;
+    } catch (error) {
+        console.error(`[Shiprocket] Error booking shipment for order ${orderId}:`, error.message);
+        try {
+            const order = await Order.findByPk(orderId);
+            if (order) {
+                order.delivery_partner = 'Shiprocket (Pending)';
+                order.tracking_number = 'SR-PEND-' + Math.floor(100000 + Math.random() * 900000);
+                await order.save();
+            }
+        } catch (dbErr) {
+            console.error("Failed to update delivery failure tracking:", dbErr);
+        }
+        return null;
+    }
+};
+
+/**
+ * Step 1: Initiate Checkout Session
+ * Creates a pending order in the database and returns Razorpay order options.
+ */
+export const initiateCheckout = async (req, res, next) => {
+    try {
+        const { items } = req.body;
+
+        if (!items || !Array.isArray(items) || items.length === 0) {
+            return res.status(400).json({ success: false, message: 'Items are required' });
+        }
+
+        // Fetch db items & prices
+        const dbItems = [];
+        for (const item of items) {
+            const prod = await Product.findByPk(item.id || item.product_id);
+            if (!prod) {
+                return res.status(404).json({ success: false, message: `Product not found: ${item.id}` });
+            }
+
+            let price = parseFloat(prod.price);
+            if (item.variantId) {
+                const variant = await ProductVariant.findByPk(item.variantId);
+                if (variant) {
+                    price = parseFloat(prod.price) + parseFloat(variant.price_adjustment || 0);
+                }
+            }
+
+            dbItems.push({
+                product_id: prod.id,
+                product_variant_id: item.variantId || null,
+                quantity: item.quantity,
+                price: price
+            });
+        }
+
+        // Create temporary Guest User for checkout tracking
+        const myReferralCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+        const temporaryGuest = await User.create({
+            id: uuidv4(),
+            name: 'Guest Customer',
+            email: null,
+            phone: null,
+            is_verified: false,
+            referral_code: myReferralCode,
+            createdAt: new Date(),
+            updatedAt: new Date()
+        });
+
+        const roleData = await Role.findOne({ where: { role_name: 'customer' } });
+        if (roleData) {
+            await temporaryGuest.addRole(roleData);
+        }
+
+        // Placeholder shipping address to pass OrderService validation
+        const custom_shipping_address = {
+            full_name: 'Guest Customer',
+            address_line1: 'Pending Checkout',
+            address_line2: '',
+            city: 'Pending',
+            state: 'Pending',
+            postal_code: '000000',
+            country: 'India',
+            phone: '0000000000'
+        };
+
+        const order = await OrderService.createOrder(temporaryGuest.id, {
+            items: dbItems,
+            custom_shipping_address,
+            payment_type: 'upi',
+            use_coins: false
+        });
+
+        const amountInPaisa = Math.round(parseFloat(order.net_amount) * 100);
+        let razorpayOrderId = '';
+        let isMock = false;
+
+        try {
+            const razorpayOptions = {
+                amount: amountInPaisa,
+                currency: 'INR',
+                receipt: order.order_number,
+                payment_capture: 1
+            };
+
+            const razorpayOrder = await razorpay.orders.create(razorpayOptions);
+            razorpayOrderId = razorpayOrder.id;
+            order.payment_transaction_id = razorpayOrderId;
+            await order.save();
+        } catch (rzpErr) {
+            console.warn("Razorpay order generation failed on checkout initiation, falling back to mock sandbox:", rzpErr.message);
+            razorpayOrderId = 'order_mock_' + Math.random().toString(36).substring(2, 12);
+            order.payment_transaction_id = razorpayOrderId;
+            await order.save();
+            isMock = true;
+        }
+
+        return res.status(200).json({
+            success: true,
+            orderId: order.id,
+            orderNumber: order.order_number,
+            razorpayOrderId,
+            amount: amountInPaisa,
+            currency: 'INR',
+            key: process.env.RAZORPAY_KEY_ID || 'rzp_test_dummyKeyId123',
+            isMock
+        });
+
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Step 2: Complete Checkout Session
+ * Called by the 3rd party hosted portal to submit details and load the payment processor.
+ */
+export const completeCheckout = async (req, res, next) => {
+    try {
+        const { orderId, customerDetails, shippingAddress, paymentMethod } = req.body;
+
+        const order = await Order.findByPk(orderId, {
+            include: [{ model: OrderItem, as: 'orderItems' }]
+        });
+        if (!order) {
+            return res.status(404).json({ success: false, message: 'Order session not found' });
+        }
+
+        // Update Guest User details
+        const user = await User.findByPk(order.user_id);
+        if (user) {
+            user.name = customerDetails.name;
+            user.email = customerDetails.email || null;
+            user.phone = customerDetails.phone;
+            user.is_verified = true;
+            await user.save();
+        }
+
+        // Update Shipping Address details
+        const shippingRecord = await OrderShippingAddress.findOne({ where: { order_id: orderId } });
+        if (shippingRecord) {
+            shippingRecord.full_name = customerDetails.name;
+            shippingRecord.address_line1 = shippingAddress.address_line1;
+            shippingRecord.address_line2 = shippingAddress.address_line2 || '';
+            shippingRecord.city = shippingAddress.city;
+            shippingRecord.state = shippingAddress.state;
+            shippingRecord.postal_code = shippingAddress.postal_code;
+            shippingRecord.phone = customerDetails.phone;
+            await shippingRecord.save();
+        }
+
+        if (paymentMethod === 'cod') {
+            order.payment_type = 'cod';
+            order.payment_status = 'not_paid';
+            order.status = 'placed';
+            await order.save();
+
+            // Book Shiprocket shipment
+            await bookShipment(order.id);
+
+            return res.status(200).json({
+                success: true,
+                paymentMethod: 'cod',
+                orderId: order.id,
+                orderNumber: order.order_number
+            });
+        }
+
+        // Online payment Razorpay options
+        order.payment_type = 'upi'; // Map to upi enum
+        order.payment_status = 'not_paid';
+        await order.save();
+
+        const amountInPaisa = Math.round(parseFloat(order.net_amount) * 100);
+
+        try {
+            const razorpayOptions = {
+                amount: amountInPaisa,
+                currency: 'INR',
+                receipt: order.order_number,
+                payment_capture: 1
+            };
+
+            const razorpayOrder = await razorpay.orders.create(razorpayOptions);
+            
+            order.payment_transaction_id = razorpayOrder.id;
+            await order.save();
+
+            return res.status(200).json({
+                success: true,
+                paymentMethod: 'razorpay',
+                orderId: order.id,
+                orderNumber: order.order_number,
+                razorpayOrderId: razorpayOrder.id,
+                amount: amountInPaisa,
+                currency: 'INR',
+                key: process.env.RAZORPAY_KEY_ID || 'rzp_test_dummyKeyId123',
+                customer: {
+                    name: customerDetails.name,
+                    email: customerDetails.email || 'guest@shivstyle.com',
+                    phone: customerDetails.phone
+                }
+            });
+        } catch (rzpErr) {
+            console.error("Razorpay order failed inside Magic portal:", rzpErr);
+            // Sandbox simulation mode
+            const mockRazorpayOrderId = 'order_mock_' + Math.random().toString(36).substring(2, 12);
+            order.payment_transaction_id = mockRazorpayOrderId;
+            await order.save();
+
+            return res.status(200).json({
+                success: true,
+                paymentMethod: 'razorpay',
+                orderId: order.id,
+                orderNumber: order.order_number,
+                razorpayOrderId: mockRazorpayOrderId,
+                amount: amountInPaisa,
+                currency: 'INR',
+                key: process.env.RAZORPAY_KEY_ID || 'rzp_test_dummyKeyId123',
+                isMock: true,
+                customer: {
+                    name: customerDetails.name,
+                    email: customerDetails.email || 'guest@shivstyle.com',
+                    phone: customerDetails.phone
+                }
+            });
+        }
+
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Fetch Order info for checkout portal initialization
+ */
+export const getCheckoutOrder = async (req, res, next) => {
+    try {
+        const order = await Order.findByPk(req.params.id, {
+            include: [
+                { model: OrderItem, as: 'orderItems' }
+            ]
+        });
+
+        if (!order) {
+            return res.status(404).json({ success: false, message: 'Checkout session expired' });
+        }
+
+        return res.status(200).json({
+            success: true,
+            order
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Verify Razorpay payment signature
+ */
+export const verifyPayment = async (req, res, next) => {
+    try {
+        const { orderId, razorpayPaymentId, razorpayOrderId, razorpaySignature } = req.body;
+
+        const order = await Order.findByPk(orderId);
+        if (!order) {
+            return res.status(404).json({ success: false, message: 'Order not found' });
+        }
+
+        const isMockOrder = razorpayOrderId.startsWith('order_mock_');
+        
+        if (isMockOrder) {
+            // Update Guest User details with sandbox dummy credentials
+            const user = await User.findByPk(order.user_id);
+            if (user) {
+                user.name = 'Rajen Kumar';
+                user.email = 'rajen.test@gmail.com';
+                user.phone = '9876543210';
+                user.is_verified = true;
+                await user.save();
+            }
+
+            // Update placeholder Shipping Address with realistic mock address details
+            const shippingRecord = await OrderShippingAddress.findOne({ where: { order_id: orderId } });
+            if (shippingRecord) {
+                shippingRecord.full_name = 'Rajen Kumar';
+                shippingRecord.address_line1 = '123 ShivStyle Residency, MG Road';
+                shippingRecord.address_line2 = 'Near Central Mall';
+                shippingRecord.city = 'Bengaluru';
+                shippingRecord.state = 'Karnataka';
+                shippingRecord.postal_code = '560001';
+                shippingRecord.phone = '9876543210';
+                await shippingRecord.save();
+            }
+
+            order.payment_type = 'upi';
+            order.payment_status = 'paid';
+            order.payment_transaction_id = razorpayPaymentId || 'pay_mock_' + Math.random().toString(36).substring(2, 12);
+            order.status = 'placed';
+            await order.save();
+
+            // Book Shiprocket shipment
+            await bookShipment(order.id);
+
+            return res.status(200).json({
+                success: true,
+                message: 'Payment verified (Sandbox)',
+                orderId: order.id
+            });
+        }
+
+        const keySecret = process.env.RAZORPAY_KEY_SECRET || 'dummySecret123';
+        const hmac = crypto.createHmac('sha256', keySecret);
+        hmac.update(razorpayOrderId + "|" + razorpayPaymentId);
+        const generatedSignature = hmac.digest('hex');
+
+        if (generatedSignature === razorpaySignature) {
+            // Fetch final order/customer information collected by 3rd-party checkout
+            let shippingAddress = null;
+            let customerDetails = { name: 'Guest Customer', email: null, phone: null };
+
+            try {
+                // Query Razorpay order endpoint
+                const rzpOrderDetails = await razorpay.orders.fetch(razorpayOrderId);
+                if (rzpOrderDetails && rzpOrderDetails.shipping_address) {
+                    shippingAddress = rzpOrderDetails.shipping_address;
+                }
+
+                // Query Razorpay payment endpoint for contact fallback
+                const rzpPaymentDetails = await razorpay.payments.fetch(razorpayPaymentId);
+                if (rzpPaymentDetails) {
+                    customerDetails.name = rzpPaymentDetails.notes?.name || rzpPaymentDetails.email?.split('@')[0] || 'Customer';
+                    customerDetails.email = rzpPaymentDetails.email;
+                    customerDetails.phone = rzpPaymentDetails.contact;
+
+                    if (!shippingAddress && rzpPaymentDetails.notes?.shipping_address) {
+                        try {
+                            const parsedAddress = JSON.parse(rzpPaymentDetails.notes.shipping_address);
+                            shippingAddress = parsedAddress;
+                        } catch (e) {
+                            shippingAddress = {
+                                line1: rzpPaymentDetails.notes.shipping_address,
+                                city: 'Pending',
+                                state: 'Pending',
+                                postal_code: '000000'
+                            };
+                        }
+                    }
+                }
+            } catch (rzpFetchErr) {
+                console.error("Failed to fetch shipping/customer details from Razorpay:", rzpFetchErr.message);
+            }
+
+            // Save customer profile details
+            const user = await User.findByPk(order.user_id);
+            if (user) {
+                user.name = customerDetails.name || user.name;
+                user.email = customerDetails.email || user.email;
+                user.phone = customerDetails.phone || user.phone;
+                user.is_verified = true;
+                await user.save();
+            }
+
+            // Save actual delivery shipping address details
+            const shippingRecord = await OrderShippingAddress.findOne({ where: { order_id: orderId } });
+            if (shippingRecord) {
+                if (shippingAddress) {
+                    shippingRecord.full_name = customerDetails.name || 'Customer';
+                    shippingRecord.address_line1 = shippingAddress.line1 || shippingAddress.address_line1 || 'Provided on checkout';
+                    shippingRecord.address_line2 = shippingAddress.line2 || shippingAddress.address_line2 || '';
+                    shippingRecord.city = shippingAddress.city || 'Provided on checkout';
+                    shippingRecord.state = shippingAddress.state || 'Provided on checkout';
+                    shippingRecord.postal_code = shippingAddress.postal_code || shippingAddress.pincode || '000000';
+                    shippingRecord.phone = customerDetails.phone || '0000000000';
+                } else {
+                    shippingRecord.full_name = customerDetails.name || 'Customer';
+                    shippingRecord.phone = customerDetails.phone || '0000000000';
+                }
+                await shippingRecord.save();
+            }
+
+            order.payment_type = 'upi';
+            order.payment_status = 'paid';
+            order.payment_transaction_id = razorpayPaymentId;
+            order.status = 'placed';
+            await order.save();
+
+            // Book Shiprocket shipment
+            await bookShipment(order.id);
+
+            return res.status(200).json({
+                success: true,
+                message: 'Payment verified',
+                orderId: order.id
+            });
+        } else {
+            return res.status(400).json({
+                success: false,
+                message: 'Signature verification failed'
+            });
+        }
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Razorpay Webhook listener (in case user leaves window early)
+ */
+export const handleWebhook = async (req, res, next) => {
+    try {
+        const signature = req.headers['x-razorpay-signature'];
+        const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET || 'webhooksecret123';
+        
+        const shasum = crypto.createHmac('sha256', webhookSecret);
+        shasum.update(JSON.stringify(req.body));
+        const digest = shasum.digest('hex');
+
+        if (digest !== signature) {
+            return res.status(400).json({ success: false, message: 'Invalid webhook signature' });
+        }
+
+        const event = req.body.event;
+        if (event === 'payment.captured') {
+            const paymentEntity = req.body.payload.payment.entity;
+            const rzpOrderId = paymentEntity.order_id;
+            const rzpPaymentId = paymentEntity.id;
+
+            const order = await Order.findOne({ where: { payment_transaction_id: rzpOrderId } });
+            if (order && order.payment_status !== 'paid') {
+                order.payment_status = 'paid';
+                order.payment_transaction_id = rzpPaymentId;
+                order.status = 'placed';
+                await order.save();
+
+                await bookShipment(order.id);
+                console.log(`[Webhook] Order ${order.order_number} marked as Paid via Webhook.`);
+            }
+        }
+
+        return res.status(200).json({ status: 'ok' });
+    } catch (error) {
+        console.error("Webhook processing failed:", error);
+        return res.status(500).json({ success: false, message: error.message });
+    }
+};

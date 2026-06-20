@@ -70,6 +70,11 @@ const Product = sequelize.define('product', {
         allowNull: false,
         defaultValue: false
     },
+    is_on_sale: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false
+    },
     discount_percentage: {
         type: DataTypes.DECIMAL(5, 2),
         allowNull: true,
@@ -77,6 +82,22 @@ const Product = sequelize.define('product', {
     },
     original_price: {
         type: DataTypes.DECIMAL(10, 2),
+        allowNull: true
+    },
+    material: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    care_instructions: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    fit: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    country_of_origin: {
+        type: DataTypes.STRING,
         allowNull: true
     },
     average_rating: {

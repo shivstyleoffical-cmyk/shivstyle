@@ -3,6 +3,7 @@ import { ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import ProductCard from '../components/ui/ProductCard';
 import { fetchProducts } from '../services/api';
+import SEO from '../components/common/SEO';
 
 const HomePage: React.FC = () => {
   const [products, setProducts] = useState<any[]>([]);
@@ -25,6 +26,11 @@ const HomePage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#fafafa]">
+      <SEO 
+        title="Modern Premium Streetwear" 
+        description="Shop the latest premium streetwear collections for men and women at ShivStyle. Handcrafted apparel, curated designs, and high-fashion aesthetics."
+        keywords="shivstyle, premium streetwear, fashion, clothing, mens fashion, womens fashion, shivstyle official"
+      />
       {/* Hero Section */}
       <section className="relative h-[80svh] bg-black overflow-hidden flex items-center">
         <div className="absolute inset-0 w-full h-full">

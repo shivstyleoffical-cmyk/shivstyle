@@ -6,6 +6,79 @@ import { uploadToCloudinary, deleteFromCloudinary, extractPublicIdFromUrl } from
 import { v4 as uuidv4 } from 'uuid';
 import sequelize, { Op } from '../../database/connection.js';
 
+// Stop words to filter out from natural language queries
+const STOP_WORDS = new Set(['a', 'an', 'the', 'and', 'or', 'but', 'for', 'with', 'in', 'on', 'at', 'to', 'from', 'by', 'of']);
+
+function parseSearchQuery(queryStr) {
+    if (!queryStr) return { search: queryStr, minPrice: null, maxPrice: null };
+    
+    let search = queryStr.trim();
+    let minPrice = null;
+    let maxPrice = null;
+
+    // Normalize multiple spaces and lowercase the text for matching
+    let normalized = search.replace(/\s+/g, ' ');
+
+    // --- RANGE PATTERNS ---
+    // A. Term at the end: "between 200 and 600 tshirt", "200 to 600 tshirt"
+    let match = normalized.match(/^(?:between\s+)?(?:rs\.?|inr|₹)?\s*(\d+)\s*(?:and|to|-)\s*(?:rs\.?|inr|₹)?\s*(\d+)\s+(.*)/i);
+    if (match) {
+        const p1 = parseFloat(match[1]);
+        const p2 = parseFloat(match[2]);
+        search = match[3].trim();
+        return { search, minPrice: Math.min(p1, p2), maxPrice: Math.max(p1, p2) };
+    }
+
+    // B. Term at the beginning: "tshirt between 200 and 600", "tshirt 200 to 600"
+    match = normalized.match(/(.*?)\s+(?:between\s+)?(?:rs\.?|inr|₹)?\s*(\d+)\s*(?:and|to|-)\s*(?:rs\.?|inr|₹)?\s*(\d+)\s*$/i);
+    if (match) {
+        const p1 = parseFloat(match[2]);
+        const p2 = parseFloat(match[3]);
+        search = match[1].trim();
+        return { search, minPrice: Math.min(p1, p2), maxPrice: Math.max(p1, p2) };
+    }
+
+    // --- UNDER / MAX PATTERNS ---
+    const underKeywords = 'under|below|less\\s+than|cheaper\\s+than|max|maximum|within|up\\s+to|budget|<|<=';
+    
+    // A. Term at the end: "under 500 tshirt"
+    match = normalized.match(new RegExp(`^(?:${underKeywords})\\s+(?:rs\\.?|inr|₹)?\\s*(\\d+)\\s+(.*)`, 'i'));
+    if (match) {
+        maxPrice = parseFloat(match[1]);
+        search = match[2].trim();
+        return { search, minPrice, maxPrice };
+    }
+
+    // B. Term at the beginning: "tshirt under 500"
+    match = normalized.match(new RegExp(`(.*)\\s+(?:${underKeywords})\\s+(?:rs\\.?|inr|₹)?\\s*(\\d+)\\s*$`, 'i'));
+    if (match) {
+        search = match[1].trim();
+        maxPrice = parseFloat(match[2]);
+        return { search, minPrice, maxPrice };
+    }
+
+    // --- ABOVE / MIN PATTERNS ---
+    const aboveKeywords = 'above|over|greater\\s+than|more\\s+than|min|minimum|starting\\s+at|starting\\s+from|>|>=';
+
+    // A. Term at the end: "above 500 tshirt"
+    match = normalized.match(new RegExp(`^(?:${aboveKeywords})\\s+(?:rs\\.?|inr|₹)?\\s*(\\d+)\\s+(.*)`, 'i'));
+    if (match) {
+        minPrice = parseFloat(match[1]);
+        search = match[2].trim();
+        return { search, minPrice, maxPrice };
+    }
+
+    // B. Term at the beginning: "tshirt above 500"
+    match = normalized.match(new RegExp(`(.*)\\s+(?:${aboveKeywords})\\s+(?:rs\\.?|inr|₹)?\\s*(\\d+)\\s*$`, 'i'));
+    if (match) {
+        search = match[1].trim();
+        minPrice = parseFloat(match[2]);
+        return { search, minPrice, maxPrice };
+    }
+
+    return { search, minPrice, maxPrice };
+}
+
 class ProductService {
     /**
      * Enhanced getAllProducts with comprehensive filtering, sorting, and pagination
@@ -28,6 +101,7 @@ class ProductService {
             is_featured,
             is_trending,
             is_new_arrival,
+            is_on_sale,
             sizes,
             colors,
             fabric,
@@ -59,21 +133,48 @@ class ProductService {
             whereClause.category_id = { [Op.in]: categoryIds };
         }
 
-        // Search functionality (case-insensitive, partial match)
+        // Parse search query for natural language price boundaries and keywords
+        let searchParsed = { search: null, minPrice: null, maxPrice: null };
         if (search) {
-            whereClause[Op.or] = [
-                { product_name: { [Op.iLike]: `%${search}%` } },
-                { description: { [Op.iLike]: `%${search}%` } },
-                { tags: { [Op.iLike]: `%${search}%` } },
-                { brand: { [Op.iLike]: `%${search}%` } }
-            ];
+            searchParsed = parseSearchQuery(search);
+        }
+
+        // Search functionality (case-insensitive, partial match with smart multi-word parsing)
+        const searchTerm = searchParsed.search || "";
+        if (searchTerm) {
+            const words = searchTerm.split(/\s+/).filter(w => w.length > 1 && !STOP_WORDS.has(w.toLowerCase()));
+            whereClause[Op.and] = whereClause[Op.and] || [];
+            if (words.length > 0) {
+                words.forEach(word => {
+                    whereClause[Op.and].push({
+                        [Op.or]: [
+                            { product_name: { [Op.iLike]: `%${word}%` } },
+                            { description: { [Op.iLike]: `%${word}%` } },
+                            { tags: { [Op.iLike]: `%${word}%` } },
+                            { brand: { [Op.iLike]: `%${word}%` } }
+                        ]
+                    });
+                });
+            } else {
+                // Fallback to exact search if all words are filtered out or single character
+                whereClause[Op.and].push({
+                    [Op.or]: [
+                        { product_name: { [Op.iLike]: `%${searchTerm}%` } },
+                        { description: { [Op.iLike]: `%${searchTerm}%` } },
+                        { tags: { [Op.iLike]: `%${searchTerm}%` } },
+                        { brand: { [Op.iLike]: `%${searchTerm}%` } }
+                    ]
+                });
+            }
         }
 
         // Price range filtering
-        if (minPrice || maxPrice) {
+        const finalMinPrice = minPrice || searchParsed.minPrice;
+        const finalMaxPrice = maxPrice || searchParsed.maxPrice;
+        if (finalMinPrice || finalMaxPrice) {
             whereClause.price = {};
-            if (minPrice) whereClause.price[Op.gte] = parseFloat(minPrice);
-            if (maxPrice) whereClause.price[Op.lte] = parseFloat(maxPrice);
+            if (finalMinPrice) whereClause.price[Op.gte] = parseFloat(finalMinPrice);
+            if (finalMaxPrice) whereClause.price[Op.lte] = parseFloat(finalMaxPrice);
         }
 
         // Stock filtering
@@ -91,10 +192,16 @@ class ProductService {
             whereClause.tags = { [Op.iLike]: `%${tags}%` };
         }
 
-        // Featured/Trending/New Arrival filters
+        // Featured/Trending/New Arrival/Sale filters
         if (is_featured === 'true') whereClause.is_featured = true;
         if (is_trending === 'true') whereClause.is_trending = true;
         if (is_new_arrival === 'true') whereClause.is_new_arrival = true;
+        if (is_on_sale === 'true') {
+            whereClause[Op.or] = [
+                { is_on_sale: true },
+                { original_price: { [Op.gt]: sequelize.col('price') } }
+            ];
+        }
 
         // Rating filter
         if (minRating) {
@@ -291,7 +398,8 @@ class ProductService {
                 tags,
                 is_featured,
                 is_trending,
-                is_new_arrival
+                is_new_arrival,
+                is_on_sale
             }
         };
     }
@@ -545,31 +653,54 @@ class ProductService {
         }
 
         const offset = (page - 1) * limit;
-        const searchTerm = q.trim();
+        const searchParsed = parseSearchQuery(q);
+        const searchTerm = searchParsed.search || "";
 
         let whereClause = {
-            status: 'active',
-            [Op.or]: [
-                { product_name: { [Op.iLike]: `%${searchTerm}%` } },
-                { description: { [Op.iLike]: `%${searchTerm}%` } },
-                { tags: { [Op.iLike]: `%${searchTerm}%` } },
-                { brand: { [Op.iLike]: `%${searchTerm}%` } }
-            ]
+            status: 'active'
         };
+
+        if (searchTerm) {
+            const words = searchTerm.split(/\s+/).filter(w => w.length > 1 && !STOP_WORDS.has(w.toLowerCase()));
+            whereClause[Op.and] = whereClause[Op.and] || [];
+            if (words.length > 0) {
+                words.forEach(word => {
+                    whereClause[Op.and].push({
+                        [Op.or]: [
+                            { product_name: { [Op.iLike]: `%${word}%` } },
+                            { description: { [Op.iLike]: `%${word}%` } },
+                            { tags: { [Op.iLike]: `%${word}%` } },
+                            { brand: { [Op.iLike]: `%${word}%` } }
+                        ]
+                    });
+                });
+            } else {
+                whereClause[Op.and].push({
+                    [Op.or]: [
+                        { product_name: { [Op.iLike]: `%${searchTerm}%` } },
+                        { description: { [Op.iLike]: `%${searchTerm}%` } },
+                        { tags: { [Op.iLike]: `%${searchTerm}%` } },
+                        { brand: { [Op.iLike]: `%${searchTerm}%` } }
+                    ]
+                });
+            }
+        }
 
         if (category_id) whereClause.category_id = category_id;
 
-        if (minPrice || maxPrice) {
+        const finalMinPrice = minPrice || searchParsed.minPrice;
+        const finalMaxPrice = maxPrice || searchParsed.maxPrice;
+        if (finalMinPrice || finalMaxPrice) {
             whereClause.price = {};
-            if (minPrice) whereClause.price[Op.gte] = parseFloat(minPrice);
-            if (maxPrice) whereClause.price[Op.lte] = parseFloat(maxPrice);
+            if (finalMinPrice) whereClause.price[Op.gte] = parseFloat(finalMinPrice);
+            if (finalMaxPrice) whereClause.price[Op.lte] = parseFloat(finalMaxPrice);
         }
 
         // For autocomplete, return limited results with just names
         if (autocomplete === 'true') {
             const results = await productRepository.findAll({
                 where: whereClause,
-                attributes: ['id', 'product_name', 'url_slug', 'image_url', 'price'],
+                attributes: ['id', 'product_name', 'url_slug', 'image_url', 'price', 'original_price', 'is_on_sale', 'discount_percentage', 'brand'],
                 include: [
                     { model: Category, as: 'category', where: { status: 'active' }, required: true }
                 ],
@@ -738,8 +869,9 @@ class ProductService {
         const {
             product_name, category_id, description,
             price, stock_quantity, status = 'active', variants,
-            brand, tags, is_featured, is_trending, is_new_arrival,
-            discount_percentage, original_price
+            brand, tags, is_featured, is_trending, is_new_arrival, is_on_sale,
+            discount_percentage, original_price,
+            material, care_instructions, fit, country_of_origin
         } = data;
 
         let { url_slug } = data;
@@ -814,8 +946,13 @@ class ProductService {
             is_featured: is_featured === 'true' || is_featured === true,
             is_trending: is_trending === 'true' || is_trending === true,
             is_new_arrival: is_new_arrival === 'true' || is_new_arrival === true,
+            is_on_sale: is_on_sale === 'true' || is_on_sale === true,
             discount_percentage: discount_percentage ? parseFloat(discount_percentage) : 0,
             original_price: original_price ? parseFloat(original_price) : null,
+            material: material || null,
+            care_instructions: care_instructions || null,
+            fit: fit || null,
+            country_of_origin: country_of_origin || null,
             createdAt: new Date(),
             updatedAt: new Date()
         });
@@ -890,8 +1027,9 @@ class ProductService {
         const {
             product_name, url_slug, category_id, description,
             price, stock_quantity, status, variants,
-            brand, tags, is_featured, is_trending, is_new_arrival,
-            discount_percentage, original_price, existing_images
+            brand, tags, is_featured, is_trending, is_new_arrival, is_on_sale,
+            discount_percentage, original_price, existing_images,
+            material, care_instructions, fit, country_of_origin
         } = data;
 
         // --- Handle Images ---
@@ -993,8 +1131,13 @@ class ProductService {
             is_featured: is_featured !== undefined ? (is_featured === 'true' || is_featured === true) : undefined,
             is_trending: is_trending !== undefined ? (is_trending === 'true' || is_trending === true) : undefined,
             is_new_arrival: is_new_arrival !== undefined ? (is_new_arrival === 'true' || is_new_arrival === true) : undefined,
+            is_on_sale: is_on_sale !== undefined ? (is_on_sale === 'true' || is_on_sale === true) : undefined,
             discount_percentage: discount_percentage ? parseFloat(discount_percentage) : undefined,
             original_price: original_price ? parseFloat(original_price) : undefined,
+            material: material !== undefined ? material : undefined,
+            care_instructions: care_instructions !== undefined ? care_instructions : undefined,
+            fit: fit !== undefined ? fit : undefined,
+            country_of_origin: country_of_origin !== undefined ? country_of_origin : undefined,
             updatedAt: new Date()
         });
 

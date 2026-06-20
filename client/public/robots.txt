@@ -1,0 +1,10 @@
+User-agent: *
+Allow: /
+
+# Block transactional and cart directories from indexing
+Disallow: /checkout
+Disallow: /order-success
+Disallow: /order-failure
+
+# Sitemap (Replace with production domain once deployed)
+Sitemap: https://shivstyle.com/sitemap.xml

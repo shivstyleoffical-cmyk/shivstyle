@@ -36,28 +36,43 @@ const ProductForm: React.FC<ProductFormProps> = ({ open, onClose, product, onSuc
       setAvailableColors(colors as string[]);
       
       // Populate existing images
-      if (product.images) {
-        setFileList(product.images.map(img => ({
-          uid: img.id,
+      const initialFiles: any[] = [];
+      if (product.images && product.images.length > 0) {
+        product.images.forEach(img => {
+          initialFiles.push({
+            uid: img.id,
+            name: 'image.png',
+            status: 'done',
+            url: img.image_url,
+            id: img.id // Store reference to original ID
+          });
+        });
+      }
+      if (product.image_url && !initialFiles.some(file => file.url === product.image_url)) {
+        initialFiles.unshift({
+          uid: 'primary-fallback',
           name: 'image.png',
           status: 'done',
-          url: img.image_url,
-          id: img.id // Store reference to original ID
-        })));
+          url: product.image_url,
+          id: 'primary-fallback'
+        });
       }
+      setFileList(initialFiles);
 
       form.setFieldsValue({
         ...product,
         available_sizes: sizes,
         available_colors: colors,
         stock_quantity: product.stock_quantity || 0,
-        status: product.status || 'active'
+        status: product.status || 'active',
+        is_on_sale: product.is_on_sale || false
       });
     } else {
       form.resetFields();
       form.setFieldsValue({
         stock_quantity: 0,
-        status: 'active'
+        status: 'active',
+        is_on_sale: false
       });
       setFileList([]);
       setAvailableSizes([]);
@@ -186,7 +201,27 @@ const ProductForm: React.FC<ProductFormProps> = ({ open, onClose, product, onSuc
         className="mt-4"
         initialValues={{
           stock_quantity: 0,
-          status: 'active'
+          status: 'active',
+          is_on_sale: false
+        }}
+        onValuesChange={(changedValues, allValues) => {
+          if (changedValues.price !== undefined || changedValues.original_price !== undefined) {
+            const price = allValues.price ? Number(allValues.price) : 0;
+            const originalPrice = allValues.original_price ? Number(allValues.original_price) : 0;
+            
+            if (originalPrice > price && originalPrice > 0) {
+              const discount = Math.round(((originalPrice - price) / originalPrice) * 100);
+              form.setFieldsValue({
+                discount_percentage: discount,
+                is_on_sale: true
+              });
+            } else {
+              form.setFieldsValue({
+                discount_percentage: 0,
+                is_on_sale: false
+              });
+            }
+          }
         }}
       >
         <Row gutter={16}>
@@ -232,7 +267,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ open, onClose, product, onSuc
             </Form.Item>
           </Col>
           <Col xs={24} sm={8}>
-            <Form.Item name="original_price" label="Original (MRP) Price">
+            <Form.Item name="original_price" label="Original (MRP) Price" rules={[{ required: true, message: 'Please enter original price' }]}>
               <InputNumber className="w-full" prefix="₹" min={0} />
             </Form.Item>
           </Col>
@@ -257,6 +292,32 @@ const ProductForm: React.FC<ProductFormProps> = ({ open, onClose, product, onSuc
           <Col xs={24} sm={8}>
             <Form.Item name="tags" label="Tags (Comma separated)">
               <Input placeholder="e.g. cotton, summer, premium" />
+            </Form.Item>
+          </Col>
+        </Row>
+
+        <Divider titlePlacement="left">Product Specifications</Divider>
+        <Row gutter={16}>
+          <Col xs={24} sm={12}>
+            <Form.Item name="material" label="Material" rules={[{ required: true, message: 'Please enter material details' }]}>
+              <Input placeholder="e.g. 100% Pure Organic Cotton" />
+            </Form.Item>
+          </Col>
+          <Col xs={24} sm={12}>
+            <Form.Item name="care_instructions" label="Care Instructions" rules={[{ required: true, message: 'Please enter care instructions' }]}>
+              <Input placeholder="e.g. Machine Wash Cold / Dry Low" />
+            </Form.Item>
+          </Col>
+        </Row>
+        <Row gutter={16}>
+          <Col xs={24} sm={12}>
+            <Form.Item name="fit" label="Fit / Cut" rules={[{ required: true, message: 'Please enter fit details' }]}>
+              <Input placeholder="e.g. Tailored Fit for Indian Standard Silhouette" />
+            </Form.Item>
+          </Col>
+          <Col xs={24} sm={12}>
+            <Form.Item name="country_of_origin" label="Country of Origin" rules={[{ required: true, message: 'Please enter country of origin' }]}>
+              <Input placeholder="e.g. Crafted with Pride in India" />
             </Form.Item>
           </Col>
         </Row>
@@ -330,22 +391,27 @@ const ProductForm: React.FC<ProductFormProps> = ({ open, onClose, product, onSuc
         </Row>
 
         <Row gutter={16} align="middle" className="bg-gray-50 p-6 rounded-2xl mb-6 border border-gray-100">
-          <Col xs={12} sm={6}>
+          <Col xs={12} sm={4}>
             <Form.Item name="is_featured" label={<span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Featured Item</span>} valuePropName="checked">
               <Switch checkedChildren="ON" unCheckedChildren="OFF" />
             </Form.Item>
           </Col>
-          <Col xs={12} sm={6}>
+          <Col xs={12} sm={4}>
             <Form.Item name="is_trending" label={<span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Trending</span>} valuePropName="checked">
               <Switch checkedChildren="ON" unCheckedChildren="OFF" />
             </Form.Item>
           </Col>
-          <Col xs={12} sm={6}>
+          <Col xs={12} sm={4}>
             <Form.Item name="is_new_arrival" label={<span className="text-[10px] font-black uppercase tracking-widest text-gray-400">New Arrival</span>} valuePropName="checked">
               <Switch checkedChildren="ON" unCheckedChildren="OFF" />
             </Form.Item>
           </Col>
-          <Col xs={12} sm={6}>
+          <Col xs={12} sm={4}>
+            <Form.Item name="is_on_sale" label={<span className="text-[10px] font-black uppercase tracking-widest text-gray-400">On Sale</span>} valuePropName="checked">
+              <Switch checkedChildren="ON" unCheckedChildren="OFF" />
+            </Form.Item>
+          </Col>
+          <Col xs={12} sm={4}>
             <Form.Item name="status" label={<span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Listing Status</span>} valuePropName="checked" getValueFromEvent={(val) => val ? 'active' : 'inactive'} getValueProps={(val) => ({ checked: val === 'active' })}>
               <Switch checkedChildren="LIVE" unCheckedChildren="HIDDEN" defaultChecked />
             </Form.Item>

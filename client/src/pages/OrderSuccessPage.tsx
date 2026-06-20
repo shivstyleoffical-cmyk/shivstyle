@@ -1,6 +1,7 @@
 import React from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { CheckCircle, Truck, Calendar } from 'lucide-react';
+import SEO from '../components/common/SEO';
 
 const OrderSuccessPage: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -19,6 +20,11 @@ const OrderSuccessPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+      <SEO 
+        title="Order Success" 
+        description="Your order was placed successfully."
+        noindex={true}
+      />
       <div className="max-w-md w-full bg-white p-8 border border-gray-100 rounded-sm shadow-sm text-center">
         
         {/* Success Icon */}

@@ -11,6 +11,9 @@ interface Product {
   image_url: string;
   category: string | { id: string; category_name: string } | null;
   is_new_arrival?: boolean;
+  is_trending?: boolean;
+  is_featured?: boolean;
+  is_on_sale?: boolean;
   url_slug: string;
 }
 
@@ -38,21 +41,33 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
     // Wishlist functionality (can be stubbed/placeholder for now)
   };
 
+  const isOnSale = product.is_on_sale || 
+                   (product.original_price && 
+                    !isNaN(Number(product.original_price)) && 
+                    Number(product.original_price) > Number(product.price));
+
   return (
     <Link to={`/product/${product.url_slug}`} className="group cursor-pointer flex flex-col">
-      <div className="relative aspect-[3/4] overflow-hidden bg-gray-100 mb-4">
+      <div className="relative aspect-[3/4] overflow-hidden bg-gray-100 mb-4 rounded-xl border border-gray-100 shadow-sm">
         {/* Badges */}
-        <div className="absolute top-3 left-3 z-10 flex flex-col gap-2">
-          {product.is_new_arrival && (
-            <span className="bg-black text-white text-[10px] font-bold uppercase tracking-widest px-2 py-1">
-              New
-            </span>
-          )}
-          {product.original_price && (
-            <span className="bg-brand-accent text-white text-[10px] font-bold uppercase tracking-widest px-2 py-1">
+        <div className="absolute top-3 left-3 z-10">
+          {isOnSale ? (
+            <span className="bg-rose-600 text-white text-[9px] font-extrabold uppercase tracking-widest px-2 py-0.5 rounded-sm shadow-sm">
               Sale
             </span>
-          )}
+          ) : product.is_new_arrival ? (
+            <span className="bg-black text-white text-[9px] font-extrabold uppercase tracking-widest px-2 py-0.5 rounded-sm">
+              New
+            </span>
+          ) : product.is_trending ? (
+            <span className="bg-yellow-500 text-black text-[9px] font-extrabold uppercase tracking-widest px-2 py-0.5 rounded-sm">
+              Trending
+            </span>
+          ) : product.is_featured ? (
+            <span className="bg-brand-accent text-white text-[9px] font-extrabold uppercase tracking-widest px-2 py-0.5 rounded-sm">
+              Featured
+            </span>
+          ) : null}
         </div>
 
         {/* Wishlist Heart */}
@@ -80,6 +95,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
             <span>Add to Bag</span>
           </button>
         </div>
+
       </div>
 
       {/* Product Info */}
@@ -89,9 +105,14 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
           {typeof product.category === 'object' ? product.category?.category_name : product.category || 'Apparel'}
         </span>
         <div className="flex items-center space-x-2 mt-1">
-          <span className="text-sm font-bold text-black">${Number(product.price).toFixed(2)}</span>
-          {product.original_price && (
-            <span className="text-xs text-gray-400 line-through">${Number(product.original_price).toFixed(2)}</span>
+          <span className="text-sm font-bold text-black">₹{Number(product.price).toFixed(2)}</span>
+          {isOnSale && product.original_price && !isNaN(Number(product.original_price)) && (
+            <>
+              <span className="text-xs text-gray-400 line-through">₹{Number(product.original_price).toFixed(2)}</span>
+              <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">
+                ({Math.round(((Number(product.original_price) - Number(product.price)) / Number(product.original_price)) * 100)}% OFF)
+              </span>
+            </>
           )}
         </div>
       </div>

@@ -25,6 +25,10 @@ export const validateCreateProduct = [
         .notEmpty().withMessage('Price is required')
         .isFloat({ min: 0.01 }).withMessage('Price must be a positive number'),
 
+    check('original_price')
+        .notEmpty().withMessage('Original price is required')
+        .isFloat({ min: 0.01 }).withMessage('Original price must be a positive number'),
+
     check('stock_quantity')
         .optional()
         .isInt({ min: 0 }).withMessage('Stock quantity must be a non-negative integer')
@@ -88,6 +92,10 @@ export const validateUpdateProduct = [
     check('price')
         .optional()
         .isFloat({ min: 0.01 }).withMessage('Price must be a positive number'),
+
+    check('original_price')
+        .optional()
+        .isFloat({ min: 0.01 }).withMessage('Original price must be a positive number'),
 
     check('stock_quantity')
         .optional()

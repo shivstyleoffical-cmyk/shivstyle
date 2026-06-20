@@ -15,6 +15,8 @@ import notificationRoutes from '../modules/notification/notification.routes.js';
 import dashboardRoutes from '../modules/dashboard/dashboard.routes.js';
 import locationRoutes from '../modules/location/location.routes.js';
 import checkoutRoutes from '../modules/checkout/checkout.routes.js';
+import Product from '../modules/product/product.model.js';
+import Category from '../modules/category/category.model.js';
 import { errorHandler } from '../middleware/errorHandler.js';
 import '../database/associations.js'; // Import associations
 import { connectDB } from '../database/connection.js';
@@ -47,6 +49,47 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/locations', locationRoutes);
 app.use('/api/checkout', checkoutRoutes);
 
+// Dynamic XML Sitemap for Search Engine Crawlers (SEO)
+app.get('/sitemap.xml', async (req, res) => {
+  try {
+    const products = await Product.findAll({ where: { status: 'active' } });
+    const categories = await Category.findAll({ where: { status: 'active' } });
+
+    const baseUrl = 'https://www.shivstyles.in';
+
+    let xml = `<?xml version="1.0" encoding="UTF-8"?>\n`;
+    xml += `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n`;
+
+    // 1. Add static pages
+    xml += `  <url><loc>${baseUrl}/</loc><changefreq>daily</changefreq><priority>1.0</priority></url>\n`;
+    xml += `  <url><loc>${baseUrl}/products</loc><changefreq>daily</changefreq><priority>0.9</priority></url>\n`;
+    xml += `  <url><loc>${baseUrl}/sale</loc><changefreq>daily</changefreq><priority>0.9</priority></url>\n`;
+    xml += `  <url><loc>${baseUrl}/support/contact</loc><changefreq>weekly</changefreq><priority>0.5</priority></url>\n`;
+    xml += `  <url><loc>${baseUrl}/support/faq</loc><changefreq>weekly</changefreq><priority>0.5</priority></url>\n`;
+    xml += `  <url><loc>${baseUrl}/support/shipping</loc><changefreq>monthly</changefreq><priority>0.3</priority></url>\n`;
+    xml += `  <url><loc>${baseUrl}/support/returns</loc><changefreq>monthly</changefreq><priority>0.3</priority></url>\n`;
+    xml += `  <url><loc>${baseUrl}/support/privacy</loc><changefreq>monthly</changefreq><priority>0.3</priority></url>\n`;
+    xml += `  <url><loc>${baseUrl}/support/terms</loc><changefreq>monthly</changefreq><priority>0.3</priority></url>\n`;
+
+    // 2. Add categories
+    categories.forEach(cat => {
+      xml += `  <url><loc>${baseUrl}/category/${cat.url_slug}</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n`;
+    });
+
+    // 3. Add products
+    products.forEach(prod => {
+      xml += `  <url><loc>${baseUrl}/product/${prod.url_slug}</loc><changefreq>daily</changefreq><priority>0.7</priority></url>\n`;
+    });
+
+    xml += `</urlset>`;
+
+    res.header('Content-Type', 'application/xml');
+    res.status(200).send(xml);
+  } catch (error) {
+    console.error('Error generating sitemap:', error);
+    res.status(500).send('Error generating sitemap');
+  }
+});
 
 // middleware for error handling
 app.use(errorHandler);

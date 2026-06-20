@@ -60,6 +60,7 @@ export interface Product {
   is_featured: boolean;
   is_trending: boolean;
   is_new_arrival: boolean;
+  is_on_sale: boolean;
   is_best_seller?: boolean;
   discount_percentage?: number;
   original_price?: number;
@@ -70,6 +71,10 @@ export interface Product {
   category?: Category;
   variants?: ProductVariant[];
   images?: ProductImage[];
+  material?: string;
+  care_instructions?: string;
+  fit?: string;
+  country_of_origin?: string;
 }
 
 export interface ProductVariant {

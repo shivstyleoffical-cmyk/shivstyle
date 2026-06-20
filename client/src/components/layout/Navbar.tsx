@@ -1,8 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { ShoppingBag, Search, Menu, X, ChevronDown, Plus, Minus, Trash2 } from 'lucide-react';
+import { ShoppingBag, Search, Menu, X, ChevronDown, Plus, Minus, Trash2, Loader } from 'lucide-react';
 import logo from '../../assets/logo.png';
-import api, { fetchCategories } from '../../services/api';
+import api, { fetchCategories, searchProducts } from '../../services/api';
 import { useCart } from '../../context/CartContext';
 
 const loadRazorpayScript = (): Promise<boolean> => {
@@ -25,15 +25,31 @@ const Navbar: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   const currentSearchParam = searchParams.get('search') || '';
   const [categories, setCategories] = useState<any[]>([]);
 
+  // Search Autocomplete States
+  const [suggestions, setSuggestions] = useState<any[]>([]);
+  const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
+
+  const popularSearches = [
+    'T-Shirt',
+    'Denim',
+    'Overalls',
+    'Floral Dress',
+    'Jacket',
+    'Kids Wear',
+    'Cotton'
+  ];
+
   // Announcement Bar sliding state
   const announcements = [
-    "FREE SHIPPING ON ALL ORDERS OVER $50",
+    "FREE SHIPPING ON ALL ORDERS OVER ₹999",
     "EASY 15-DAY RETURNS & EXCHANGE",
     "100% PREMIUM HAND-CRAFTED APPAREL",
     "USE CODE: FIRST10 FOR 10% OFF YOUR FIRST ORDER"
@@ -52,7 +68,7 @@ const Navbar: React.FC = () => {
     return () => clearInterval(timer);
   }, []);
 
-  // Load categories on mount
+  // Load categories and recent searches on mount
   useEffect(() => {
     const loadCategories = async () => {
       try {
@@ -63,6 +79,15 @@ const Navbar: React.FC = () => {
       }
     };
     loadCategories();
+
+    const saved = localStorage.getItem('recent_searches');
+    if (saved) {
+      try {
+        setRecentSearches(JSON.parse(saved));
+      } catch (e) {
+        console.error("Failed to load recent searches:", e);
+      }
+    }
   }, []);
 
   // Keep search state synchronized with URL search parameter
@@ -77,12 +102,74 @@ const Navbar: React.FC = () => {
     }
   }, [isSearchOpen]);
 
-  // Close search overlay if the path changes to something other than /products
+  // Close search overlay and mobile menu if the path changes
   useEffect(() => {
     if (location.pathname !== '/products' && !location.pathname.startsWith('/category/')) {
       setIsSearchOpen(false);
     }
+    setIsMobileMenuOpen(false);
   }, [location.pathname]);
+
+  // Debounced fetch search suggestions
+  useEffect(() => {
+    const cleanQuery = searchQuery.trim();
+    if (cleanQuery.length < 2) {
+      setSuggestions([]);
+      return;
+    }
+
+    const delayDebounce = setTimeout(async () => {
+      setIsLoadingSuggestions(true);
+      try {
+        const data = await searchProducts({ q: cleanQuery, autocomplete: 'true' });
+        setSuggestions(data.suggestions || []);
+      } catch (error) {
+        console.error("Failed to fetch search suggestions:", error);
+      } finally {
+        setIsLoadingSuggestions(false);
+      }
+    }, 300);
+
+    return () => clearTimeout(delayDebounce);
+  }, [searchQuery]);
+
+  const saveRecentSearch = (query: string) => {
+    const clean = query.trim();
+    if (!clean) return;
+    setRecentSearches(prev => {
+      const filtered = prev.filter(q => q.toLowerCase() !== clean.toLowerCase());
+      const updated = [clean, ...filtered].slice(0, 5); // Limit to top 5
+      localStorage.setItem('recent_searches', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  const removeRecentSearch = (term: string) => {
+    setRecentSearches(prev => {
+      const updated = prev.filter(q => q !== term);
+      localStorage.setItem('recent_searches', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  const clearRecentSearches = () => {
+    setRecentSearches([]);
+    localStorage.removeItem('recent_searches');
+  };
+
+  const handleSearchTermClick = (term: string) => {
+    saveRecentSearch(term);
+    setSearchQuery(term);
+    setIsSearchOpen(false);
+    navigate(`/products?search=${encodeURIComponent(term)}`);
+  };
+
+  const handleProductClick = (slug: string, productName: string) => {
+    saveRecentSearch(productName);
+    setIsSearchOpen(false);
+    setSearchQuery('');
+    navigate(`/product/${slug}`);
+  };
 
   const handleSearchInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -99,18 +186,17 @@ const Navbar: React.FC = () => {
         }
         return next;
       }, { replace: true });
-    } else {
-      if (cleanValue !== '') {
-        navigate(`/products?search=${encodeURIComponent(cleanValue)}`, { replace: true });
-      } else {
-        navigate(`/products`, { replace: true });
-      }
     }
   };
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setIsSearchOpen(false);
+    const cleanQuery = searchQuery.trim();
+    if (cleanQuery) {
+      saveRecentSearch(cleanQuery);
+      setIsSearchOpen(false);
+      navigate(`/products?search=${encodeURIComponent(cleanQuery)}`);
+    }
   };
 
   return (
@@ -130,7 +216,10 @@ const Navbar: React.FC = () => {
 
             {/* Mobile menu button & Search (Left side on mobile) */}
             <div className="flex items-center space-x-4 md:hidden flex-1">
-              <button className="text-black hover:text-brand-accent transition-colors">
+              <button 
+                onClick={() => setIsMobileMenuOpen(true)}
+                className="text-black hover:text-brand-accent transition-colors p-1"
+              >
                 <Menu size={22} strokeWidth={1.5} />
               </button>
               <button
@@ -252,32 +341,248 @@ const Navbar: React.FC = () => {
 
           {/* Search Overlay (Visible when search is open) */}
           <div className={`absolute inset-0 bg-white flex items-center justify-between px-4 sm:px-6 lg:px-8 transition-all duration-300 ${isSearchOpen ? 'opacity-100 pointer-events-auto z-10' : 'opacity-0 pointer-events-none -z-10'}`}>
-            <form onSubmit={handleSearchSubmit} className="flex items-center w-full space-x-4">
-              <Search size={22} className="text-black flex-shrink-0" strokeWidth={1.5} />
-              <input
-                ref={searchInputRef}
-                type="text"
-                placeholder="Search products, collections, brands..."
-                value={searchQuery}
-                onChange={handleSearchInputChange}
-                className="w-full bg-transparent border-b border-gray-200 py-2 text-sm text-black placeholder-gray-400 focus:outline-none focus:border-black font-medium"
-              />
-              <button
-                type="button"
-                onClick={() => {
-                  setIsSearchOpen(false);
-                  setSearchQuery('');
-                  setSearchParams((prev) => {
-                    const next = new URLSearchParams(prev);
-                    next.delete('search');
-                    return next;
-                  }, { replace: true });
-                }}
-                className="text-black hover:text-brand-accent transition-colors flex-shrink-0 p-2"
-              >
-                <X size={22} strokeWidth={1.5} />
-              </button>
-            </form>
+            <div className="w-full relative flex items-center h-full">
+              <form onSubmit={handleSearchSubmit} className="flex items-center w-full space-x-4">
+                <Search size={22} className="text-black flex-shrink-0" strokeWidth={1.5} />
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  placeholder="Search products, collections, brands..."
+                  value={searchQuery}
+                  onChange={handleSearchInputChange}
+                  className="w-full bg-transparent border-b border-gray-200 py-2 text-sm text-black placeholder-gray-400 focus:outline-none focus:border-black font-medium"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsSearchOpen(false);
+                    setSearchQuery('');
+                    setSearchParams((prev) => {
+                      const next = new URLSearchParams(prev);
+                      next.delete('search');
+                      return next;
+                    }, { replace: true });
+                  }}
+                  className="text-black hover:text-brand-accent transition-colors flex-shrink-0 p-2"
+                >
+                  <X size={22} strokeWidth={1.5} />
+                </button>
+              </form>
+
+              {/* Advanced Autocomplete & Recommendations Panel */}
+              {isSearchOpen && (
+                <div className="absolute top-[80px] left-0 right-0 bg-white/95 backdrop-blur-md border-t border-zinc-100 shadow-2xl z-50 overflow-y-auto max-h-[80vh] transition-all duration-300 transform rounded-b-xl">
+                  <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                    
+                    {/* CASE 1: Empty or short query - show Popular & Recent searches */}
+                    {searchQuery.trim().length < 2 ? (
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
+                        {/* Recent Searches */}
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-between pb-2 border-b border-zinc-100">
+                            <h4 className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">
+                              Recent Searches
+                            </h4>
+                            {recentSearches.length > 0 && (
+                              <button 
+                                type="button"
+                                onClick={clearRecentSearches}
+                                className="text-[9px] font-bold text-zinc-400 hover:text-brand-accent transition-colors uppercase tracking-widest"
+                              >
+                                Clear All
+                              </button>
+                            )}
+                          </div>
+                          {recentSearches.length === 0 ? (
+                            <p className="text-xs text-zinc-400 italic font-medium">No recent searches yet</p>
+                          ) : (
+                            <div className="flex flex-col space-y-3">
+                              {recentSearches.map((term) => (
+                                <div key={term} className="flex items-center justify-between group">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSearchTermClick(term)}
+                                    className="text-xs text-zinc-600 hover:text-black transition-colors text-left flex-1 font-medium"
+                                  >
+                                    {term}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => removeRecentSearch(term)}
+                                    className="text-zinc-400 hover:text-zinc-600 transition-colors p-1"
+                                  >
+                                    <X size={12} />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Popular Searches & Quick Categories */}
+                        <div className="space-y-8 md:col-span-2">
+                          <div className="space-y-4">
+                            <h4 className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 pb-2 border-b border-zinc-100">
+                              Popular Searches
+                            </h4>
+                            <div className="flex flex-wrap gap-2.5">
+                              {popularSearches.map((term) => (
+                                <button
+                                  type="button"
+                                  key={term}
+                                  onClick={() => handleSearchTermClick(term)}
+                                  className="text-[10px] font-bold uppercase tracking-widest text-zinc-600 border border-zinc-200 hover:border-black hover:text-black transition-all px-3.5 py-2 bg-white"
+                                >
+                                  {term}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="space-y-4">
+                            <h4 className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 pb-2 border-b border-zinc-100">
+                              Quick Categories
+                            </h4>
+                            <div className="flex flex-wrap gap-x-8 gap-y-3">
+                              {categories.filter(c => !c.parent_cat_id).slice(0, 4).map((cat, idx, arr) => (
+                                <div key={cat.id} className="flex items-center">
+                                  <Link
+                                    to={`/category/${cat.url_slug}`}
+                                    onClick={() => setIsSearchOpen(false)}
+                                    className="text-[11px] font-bold uppercase tracking-widest text-zinc-600 hover:text-black transition-colors"
+                                  >
+                                    {cat.category_name}
+                                  </Link>
+                                  {idx < arr.length - 1 && (
+                                    <span className="text-zinc-200 ml-8 text-[11px] font-light">/</span>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      
+                      // CASE 2: Active Search - show suggestions & matches
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
+                        {/* Auto-suggest list */}
+                        <div className="space-y-4">
+                          <h4 className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 pb-2 border-b border-zinc-100">
+                            Suggestions for "{searchQuery}"
+                          </h4>
+                          {isLoadingSuggestions ? (
+                            <div className="flex items-center gap-2 text-zinc-400 text-xs py-2">
+                              <Loader size={14} className="animate-spin text-zinc-500" />
+                              <span>Finding matches...</span>
+                            </div>
+                          ) : suggestions.length === 0 ? (
+                            <p className="text-xs text-zinc-400 italic font-medium">No search suggestions</p>
+                          ) : (
+                            <div className="flex flex-col space-y-3">
+                              {Array.from(new Set(suggestions.map(s => s.product_name))).slice(0, 6).map((name) => (
+                                <button
+                                  type="button"
+                                  key={name}
+                                  onClick={() => handleSearchTermClick(name)}
+                                  className="text-xs text-zinc-600 hover:text-black transition-colors text-left py-1 hover:pl-1 duration-200 transition-all font-medium flex items-center gap-2"
+                                >
+                                  <Search size={10} className="text-zinc-400" />
+                                  <span>{name}</span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Matching Products Column */}
+                        <div className="md:col-span-2 space-y-4">
+                          <h4 className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 pb-2 border-b border-zinc-100">
+                            Matching Products
+                          </h4>
+
+                          {isLoadingSuggestions ? (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              {[1, 2, 3, 4].map(n => (
+                                <div key={n} className="flex items-center gap-3 animate-pulse">
+                                  <div className="w-12 h-16 bg-zinc-100" />
+                                  <div className="space-y-2 flex-1">
+                                    <div className="h-3 bg-zinc-100 w-2/3" />
+                                    <div className="h-3 bg-zinc-100 w-1/3" />
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : suggestions.length === 0 ? (
+                            <div className="text-zinc-400 text-xs italic py-4">
+                              No products match your search query. Try searching for "tshirt under 500" or other keywords.
+                            </div>
+                          ) : (
+                            <div className="space-y-4 max-h-[45vh] overflow-y-auto pr-2">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                {suggestions.slice(0, 6).map((product) => {
+                                  const displayPrice = Number(product.price);
+                                  const originalPrice = (product.original_price && !isNaN(Number(product.original_price))) ? Number(product.original_price) : null;
+                                  const discountPercentage = product.discount_percentage ? Number(product.discount_percentage) : 0;
+                                  const isOnSale = product.is_on_sale || (originalPrice && originalPrice > displayPrice);
+
+                                  return (
+                                    <div 
+                                      key={product.id}
+                                      onClick={() => handleProductClick(product.url_slug, product.product_name)}
+                                      className="flex items-center gap-3.5 p-2 bg-white hover:bg-zinc-50 border border-zinc-100 rounded-none cursor-pointer transition-all duration-200 group"
+                                    >
+                                      <div className="w-12 h-16 bg-zinc-100 overflow-hidden flex-shrink-0">
+                                        {product.image_url ? (
+                                          <img 
+                                            src={product.image_url} 
+                                            alt={product.product_name}
+                                            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-102"
+                                          />
+                                        ) : (
+                                          <div className="w-full h-full flex items-center justify-center text-[10px] text-zinc-400">No Image</div>
+                                        )}
+                                      </div>
+                                      <div className="flex-1 min-w-0">
+                                        {product.brand && (
+                                          <span className="block text-[8px] font-extrabold uppercase tracking-widest text-zinc-400">{product.brand}</span>
+                                        )}
+                                        <h5 className="text-[11px] font-bold text-zinc-800 truncate uppercase tracking-wide group-hover:text-brand-accent transition-colors">{product.product_name}</h5>
+                                        <div className="flex items-center gap-1.5 mt-0.5">
+                                          <span className="text-[11px] font-extrabold text-black">₹{displayPrice.toFixed(2)}</span>
+                                          {isOnSale && originalPrice && (
+                                            <>
+                                              <span className="text-[9px] text-zinc-400 line-through">₹{originalPrice.toFixed(2)}</span>
+                                              <span className="text-[8px] font-bold uppercase tracking-wider text-brand-accent">({discountPercentage || Math.round(((originalPrice - displayPrice) / originalPrice) * 100)}% OFF)</span>
+                                            </>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+
+                              {/* View All Button */}
+                              <div className="pt-2">
+                                <button
+                                  type="button"
+                                  onClick={() => handleSearchTermClick(searchQuery)}
+                                  className="w-full text-center py-3 bg-black hover:bg-zinc-900 text-white text-[10px] font-bold uppercase tracking-widest transition-colors rounded-none"
+                                >
+                                  View All Results ({suggestions.length})
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
         </div>
@@ -379,7 +684,7 @@ const Navbar: React.FC = () => {
 
                           {/* Price */}
                           <span className="text-xs font-bold text-black">
-                            ${(item.price * item.quantity).toFixed(2)}
+                            ₹{(item.price * item.quantity).toFixed(2)}
                           </span>
                         </div>
                       </div>
@@ -393,7 +698,7 @@ const Navbar: React.FC = () => {
                 <div className="px-6 py-6 border-t border-gray-100 space-y-4 bg-gray-50">
                   <div className="flex justify-between items-center text-sm font-bold text-black uppercase tracking-wider">
                     <span>Subtotal</span>
-                    <span>${cartTotal.toFixed(2)}</span>
+                    <span>₹{cartTotal.toFixed(2)}</span>
                   </div>
                   <p className="text-[10px] text-gray-400">Shipping and taxes calculated at checkout.</p>
                   <div className="grid gap-2">
@@ -503,6 +808,107 @@ const Navbar: React.FC = () => {
                   </div>
                 </div>
               )}
+
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sliding Mobile Menu Drawer Overlay */}
+      {isMobileMenuOpen && (
+        <div className="fixed inset-0 z-50 overflow-hidden md:hidden">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-xs transition-opacity duration-300" onClick={() => setIsMobileMenuOpen(false)} />
+          <div className="absolute inset-y-0 left-0 max-w-full flex pr-10">
+            <div className="w-screen max-w-xs transform transition-all duration-300 ease-in-out bg-white shadow-2xl flex flex-col h-full">
+              
+              {/* Header */}
+              <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between">
+                <span className="text-xs font-extrabold uppercase tracking-widest text-black">Menu</span>
+                <button 
+                  onClick={() => setIsMobileMenuOpen(false)} 
+                  className="text-gray-400 hover:text-black transition-colors p-1"
+                >
+                  <X size={20} strokeWidth={1.5} />
+                </button>
+              </div>
+
+              {/* Navigation list */}
+              <div className="flex-1 py-6 overflow-y-auto px-6 space-y-6">
+                <div className="flex flex-col space-y-4">
+                  <Link
+                    to="/"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className="text-[12px] font-bold uppercase tracking-widest text-zinc-950 pb-2 border-b border-zinc-50"
+                  >
+                    New Arrivals
+                  </Link>
+
+                  {categories.length === 0 ? (
+                    <>
+                      <Link
+                        to="/category/men"
+                        onClick={() => setIsMobileMenuOpen(false)}
+                        className="text-[12px] font-bold uppercase tracking-widest text-zinc-700 hover:text-black pb-2 border-b border-zinc-50"
+                      >
+                        Men
+                      </Link>
+                      <Link
+                        to="/category/women"
+                        onClick={() => setIsMobileMenuOpen(false)}
+                        className="text-[12px] font-bold uppercase tracking-widest text-zinc-700 hover:text-black pb-2 border-b border-zinc-50"
+                      >
+                        Women
+                      </Link>
+                      <Link
+                        to="/category/kids"
+                        onClick={() => setIsMobileMenuOpen(false)}
+                        className="text-[12px] font-bold uppercase tracking-widest text-zinc-700 hover:text-black pb-2 border-b border-zinc-50"
+                      >
+                        Kids
+                      </Link>
+                    </>
+                  ) : (
+                    categories
+                      .filter((cat) => !cat.parent_cat_id)
+                      .map((parent) => {
+                        const children = categories.filter((c) => c.parent_cat_id === parent.id);
+                        return (
+                          <div key={parent.id} className="space-y-2">
+                            <Link
+                              to={`/category/${parent.url_slug}`}
+                              onClick={() => setIsMobileMenuOpen(false)}
+                              className="text-[12px] font-extrabold uppercase tracking-widest text-zinc-950 block"
+                            >
+                              {parent.category_name}
+                            </Link>
+                            {children.length > 0 && (
+                              <div className="pl-4 flex flex-col space-y-2 border-l border-zinc-100">
+                                {children.map((child) => (
+                                  <Link
+                                    key={child.id}
+                                    to={`/category/${child.url_slug}`}
+                                    onClick={() => setIsMobileMenuOpen(false)}
+                                    className="text-[11px] font-bold uppercase tracking-wider text-zinc-500 hover:text-black"
+                                  >
+                                    {child.category_name}
+                                  </Link>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })
+                  )}
+
+                  <Link
+                    to="/sale"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className="text-[12px] font-bold uppercase tracking-widest text-brand-accent pt-2 block"
+                  >
+                    Sale
+                  </Link>
+                </div>
+              </div>
 
             </div>
           </div>

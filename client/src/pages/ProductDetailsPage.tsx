@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ShoppingBag, Heart, Star, ChevronRight, Truck, RefreshCw, ShieldCheck, Plus, Minus } from 'lucide-react';
+import { ShoppingBag, Heart, Star, StarHalf, ChevronRight, Plus, Minus, Ruler } from 'lucide-react';
 import api, { fetchProductBySlug, fetchRecommendedProducts } from '../services/api';
 import { useCart } from '../context/CartContext';
 import ProductCard from '../components/ui/ProductCard';
+import SEO from '../components/common/SEO';
 
 const loadRazorpayScript = (): Promise<boolean> => {
   return new Promise((resolve) => {
@@ -45,11 +46,21 @@ interface Product {
   description: string;
   brand?: string;
   category: { id: string; category_name: string; url_slug: string } | null;
+  image_url?: string;
   images?: ProductImage[];
   variants?: Variant[];
   average_rating?: number;
   total_reviews?: number;
   url_slug: string;
+  is_featured?: boolean;
+  is_trending?: boolean;
+  is_new_arrival?: boolean;
+  is_on_sale?: boolean;
+  tags?: string;
+  material?: string;
+  care_instructions?: string;
+  fit?: string;
+  country_of_origin?: string;
 }
 
 const ProductDetailsPage: React.FC = () => {
@@ -72,6 +83,20 @@ const ProductDetailsPage: React.FC = () => {
   // Accordion state
   const [activeAccordion, setActiveAccordion] = useState<string>('description');
 
+  // Size Chart state
+  const [isSizeChartOpen, setIsSizeChartOpen] = useState(false);
+
+  // Zoom magnifier states
+  const [zoomPos, setZoomPos] = useState({ x: 0, y: 0 });
+  const [isZoomed, setIsZoomed] = useState(false);
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const { left, top, width, height } = e.currentTarget.getBoundingClientRect();
+    const x = ((e.clientX - left) / width) * 100;
+    const y = ((e.clientY - top) / height) * 100;
+    setZoomPos({ x, y });
+  };
+
   useEffect(() => {
     const loadProductData = async () => {
       if (!slug) return;
@@ -82,6 +107,19 @@ const ProductDetailsPage: React.FC = () => {
         const response = await fetchProductBySlug(slug);
         if (response.success && response.product) {
           const prod: Product = response.product;
+          
+          // Combine prod.image_url and prod.images if they are different and image_url is not in images
+          const allImages = prod.images ? [...prod.images] : [];
+          if (prod.image_url && !allImages.some(img => img.image_url === prod.image_url)) {
+            allImages.unshift({
+              id: 'primary-fallback',
+              image_url: prod.image_url,
+              image_order: -1,
+              is_primary: !allImages.some(img => img.is_primary)
+            });
+          }
+          prod.images = allImages;
+          
           setProduct(prod);
           
           // Set initial active image
@@ -161,6 +199,11 @@ const ProductDetailsPage: React.FC = () => {
       selectedVariantId = matched.id;
     }
   }
+
+  const isOnSale = product.is_on_sale || 
+                   (product.original_price && 
+                    !isNaN(Number(product.original_price)) && 
+                    Number(product.original_price) > displayPrice);
 
   // Gather unique sizes and colors
   const availableSizes = product.variants 
@@ -303,8 +346,41 @@ const ProductDetailsPage: React.FC = () => {
     }
   };
 
+  const averageRating = (!product.average_rating || Number(product.average_rating) === 0) ? 4.5 : Number(product.average_rating);
+  const reviewsCount = (!product.total_reviews || Number(product.total_reviews) === 0) ? 12 : Number(product.total_reviews);
+
+  const schemaMarkup = {
+    "@context": "https://schema.org/",
+    "@type": "Product",
+    "name": product.product_name,
+    "image": activeImage || product.image_url || '',
+    "description": product.description ? product.description.replace(/<[^>]*>/g, '') : '',
+    "sku": product.id,
+    "brand": {
+      "@type": "Brand",
+      "name": product.brand || "ShivStyle"
+    },
+    "offers": {
+      "@type": "Offer",
+      "url": window.location.href,
+      "priceCurrency": "INR",
+      "price": displayPrice,
+      "priceValidUntil": "2030-12-31",
+      "itemCondition": "https://schema.org/NewCondition",
+      "availability": "https://schema.org/InStock"
+    }
+  };
+
   return (
     <div className="min-h-screen bg-white">
+      <SEO 
+        title={product.product_name}
+        description={product.description ? product.description.replace(/<[^>]*>/g, '').substring(0, 160) : `Buy ${product.product_name} at ShivStyle. Premium clothing crafted with standard quality.`}
+        keywords={product.tags ? `${product.product_name}, ${product.tags}` : `${product.product_name}, premium clothing, fashion, shivstyle`}
+        ogImage={activeImage || product.image_url}
+        ogType="product"
+        schemaMarkup={schemaMarkup}
+      />
       {/* Breadcrumbs */}
       <div className="border-b border-gray-100 py-4">
         <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8">
@@ -331,12 +407,21 @@ const ProductDetailsPage: React.FC = () => {
           <div className="lg:col-span-7 flex flex-col md:flex-row-reverse gap-4">
             
             {/* Main Active Image */}
-            <div className="flex-1 aspect-[3/4] bg-gray-50 overflow-hidden relative group">
+            <div 
+              className="flex-1 aspect-[3/4] bg-gray-50 overflow-hidden relative group rounded-2xl border border-zinc-100 cursor-zoom-in shadow-sm"
+              onMouseEnter={() => setIsZoomed(true)}
+              onMouseLeave={() => setIsZoomed(false)}
+              onMouseMove={handleMouseMove}
+            >
               {activeImage ? (
                 <img 
                   src={activeImage} 
                   alt={product.product_name} 
-                  className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-700 ease-out"
+                  className="w-full h-full object-cover object-center transition-transform duration-150 ease-out"
+                  style={{
+                    transformOrigin: `${zoomPos.x}% ${zoomPos.y}%`,
+                    transform: isZoomed ? 'scale(1.8)' : 'scale(1)'
+                  }}
                 />
               ) : (
                 <div className="w-full h-full bg-gray-100 flex items-center justify-center text-gray-300">
@@ -354,8 +439,8 @@ const ProductDetailsPage: React.FC = () => {
                     <button
                       key={img.id}
                       onClick={() => setActiveImage(img.image_url)}
-                      className={`w-20 aspect-[3/4] flex-shrink-0 border-2 overflow-hidden bg-gray-50 transition-all ${
-                        activeImage === img.image_url ? 'border-black' : 'border-transparent hover:border-gray-300'
+                      className={`w-20 aspect-[3/4] flex-shrink-0 border-2 overflow-hidden bg-gray-50 rounded-lg transition-all ${
+                        activeImage === img.image_url ? 'border-black shadow-sm scale-95' : 'border-transparent hover:border-gray-300'
                       }`}
                     >
                       <img src={img.image_url} alt="" className="w-full h-full object-cover" />
@@ -369,6 +454,27 @@ const ProductDetailsPage: React.FC = () => {
           {/* RIGHT: Product Info & Configuration */}
           <div className="lg:col-span-5 flex flex-col justify-start">
             
+            {/* Badges */}
+            {(product.is_new_arrival || product.is_trending || product.is_featured) && (
+              <div className="flex flex-wrap gap-1.5 mb-3.5">
+                {product.is_new_arrival && (
+                  <span className="bg-black text-white text-[9px] font-extrabold uppercase tracking-widest px-2.5 py-0.5 rounded-full">
+                    New Arrival
+                  </span>
+                )}
+                {product.is_trending && (
+                  <span className="bg-yellow-400 text-black text-[9px] font-extrabold uppercase tracking-widest px-2.5 py-0.5 rounded-full">
+                    Trending
+                  </span>
+                )}
+                {product.is_featured && (
+                  <span className="bg-brand-accent text-white text-[9px] font-extrabold uppercase tracking-widest px-2.5 py-0.5 rounded-full">
+                    Featured
+                  </span>
+                )}
+              </div>
+            )}
+
             {/* Brand & Title */}
             <span className="text-[10px] font-extrabold uppercase tracking-[0.25em] text-brand-accent mb-2">
               {product.brand || 'ShivStyle Originals'}
@@ -378,35 +484,47 @@ const ProductDetailsPage: React.FC = () => {
             </h1>
 
             {/* Rating / Review Overview */}
-            <div className="flex items-center space-x-4 mb-6">
+            <div className="flex items-center space-x-2.5 mb-6">
               <div className="flex items-center">
-                {[...Array(5)].map((_, i) => (
-                  <Star 
-                    key={i} 
-                    size={14} 
-                    className={i < Math.floor(product.average_rating || 4.5) ? "fill-black text-black" : "text-gray-200"} 
-                  />
-                ))}
-                <span className="text-xs font-bold text-black ml-1.5">{Number(product.average_rating || 4.5).toFixed(1)}</span>
+                {[...Array(5)].map((_, i) => {
+                  const starNumber = i + 1;
+                  const isFilled = starNumber <= Math.floor(averageRating);
+                  const isHalf = !isFilled && starNumber === Math.ceil(averageRating) && averageRating % 1 !== 0;
+                  
+                  if (isFilled) {
+                    return <Star key={i} size={14} className="fill-yellow-400 text-yellow-400" />;
+                  } else if (isHalf) {
+                    return <StarHalf key={i} size={14} className="fill-yellow-400 text-yellow-400" />;
+                  } else {
+                    return <Star key={i} size={14} className="text-zinc-200" />;
+                  }
+                })}
+                <span className="text-xs font-bold text-zinc-800 ml-1.5">{averageRating.toFixed(1)}</span>
               </div>
-              <span className="text-xs font-bold uppercase text-gray-400 tracking-widest border-l border-gray-200 pl-4">
-                {product.total_reviews || 12} Reviews
+              <span className="text-xs font-bold text-zinc-400 tracking-wider">
+                ({reviewsCount} reviews)
               </span>
             </div>
 
             {/* Pricing Section */}
-            <div className="flex items-baseline space-x-3 mb-8 border-y border-gray-100 py-4">
-              <span className="text-2xl font-bold text-black">${displayPrice.toFixed(2)}</span>
-              {product.original_price && (
-                <>
-                  <span className="text-sm font-semibold text-gray-400 line-through">
-                    ${Number(product.original_price).toFixed(2)}
-                  </span>
-                  <span className="bg-brand-accent text-white text-[9px] font-bold uppercase px-2 py-0.5 tracking-wider rounded-sm">
-                    Sale
-                  </span>
-                </>
-              )}
+            <div className="mb-8 border-y border-gray-100 py-5">
+              <div className="flex items-baseline space-x-3">
+                <span className="text-2xl font-bold text-black">₹{displayPrice.toFixed(2)}</span>
+                {isOnSale && product.original_price && !isNaN(Number(product.original_price)) && (
+                  <>
+                    <span className="text-sm font-semibold text-gray-400 line-through">
+                      ₹{Number(product.original_price).toFixed(2)}
+                    </span>
+                    <span className="text-sm font-bold text-emerald-600 uppercase tracking-wider">
+                      ({Math.round(((Number(product.original_price) - displayPrice) / Number(product.original_price)) * 100)}% OFF)
+                    </span>
+                    <span className="bg-brand-accent text-white text-[9px] font-bold uppercase px-2 py-0.5 tracking-wider rounded-sm">
+                      Sale
+                    </span>
+                  </>
+                )}
+              </div>
+              <p className="text-[11px] text-gray-500 mt-2 font-medium uppercase tracking-wider">Tax included. Shipping calculated at checkout.</p>
             </div>
 
             {/* Validation Message */}
@@ -423,20 +541,20 @@ const ProductDetailsPage: React.FC = () => {
               {availableColors.length > 0 && (
                 <div>
                   <div className="flex justify-between items-center mb-3">
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-black">Color</span>
-                    <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">{selectedColor}</span>
+                    <span className="text-xs font-bold uppercase tracking-wider text-black">Color</span>
+                    <span className="text-xs font-bold text-zinc-500 uppercase tracking-wider">{selectedColor}</span>
                   </div>
-                  <div className="flex gap-2 flex-wrap">
+                  <div className="flex gap-2.5 flex-wrap">
                     {availableColors.map((color) => {
                       const isSelected = selectedColor === color;
                       return (
                         <button
                           key={color}
                           onClick={() => setSelectedColor(color)}
-                          className={`text-xs font-bold uppercase tracking-wider px-4 py-2 border rounded-sm transition-all ${
+                          className={`text-xs font-bold uppercase tracking-wider px-5 py-2.5 border rounded-full transition-all duration-300 ${
                             isSelected 
-                              ? 'border-black bg-black text-white' 
-                              : 'border-gray-200 hover:border-black text-black'
+                              ? 'border-black bg-black text-white shadow-md shadow-black/10' 
+                              : 'border-zinc-200 hover:border-black text-black hover:bg-zinc-50'
                           }`}
                         >
                           {color}
@@ -451,20 +569,26 @@ const ProductDetailsPage: React.FC = () => {
               {availableSizes.length > 0 && (
                 <div>
                   <div className="flex justify-between items-center mb-3">
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-black">Select Size</span>
-                    <span className="text-xs font-bold text-brand-accent uppercase tracking-widest">Size Guide</span>
+                    <span className="text-xs font-bold uppercase tracking-wider text-black">Size</span>
+                    <button 
+                      onClick={() => setIsSizeChartOpen(true)}
+                      className="text-xs font-bold text-zinc-500 hover:text-black flex items-center space-x-1.5 transition-colors uppercase tracking-wider"
+                    >
+                      <Ruler size={14} />
+                      <span>Size Chart</span>
+                    </button>
                   </div>
-                  <div className="flex gap-2 flex-wrap">
+                  <div className="flex gap-2.5 flex-wrap">
                     {availableSizes.map((size) => {
                       const isSelected = selectedSize === size;
                       return (
                         <button
                           key={size}
                           onClick={() => setSelectedSize(size)}
-                          className={`min-w-[48px] h-12 text-xs font-bold uppercase tracking-wider border rounded-sm transition-all flex items-center justify-center ${
+                          className={`w-12 h-12 rounded-full text-xs font-bold uppercase tracking-wider border transition-all duration-300 flex items-center justify-center ${
                             isSelected 
-                              ? 'border-black bg-black text-white' 
-                              : 'border-gray-200 hover:border-black text-black'
+                              ? 'border-black bg-black text-white shadow-md shadow-black/10 scale-105' 
+                              : 'border-zinc-200 hover:border-black text-black hover:bg-zinc-50'
                           }`}
                         >
                           {size}
@@ -477,18 +601,18 @@ const ProductDetailsPage: React.FC = () => {
 
               {/* Quantity Selection */}
               <div>
-                <span className="text-[10px] font-bold uppercase tracking-widest text-black block mb-3">Quantity</span>
-                <div className="flex items-center border border-gray-200 w-32 justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-black block mb-3">Quantity</span>
+                <div className="flex items-center border border-zinc-200 rounded-full w-32 justify-between px-1.5 py-1">
                   <button 
                     onClick={() => setQuantity(prev => Math.max(1, prev - 1))}
-                    className="px-3 py-2 text-gray-400 hover:text-black transition-colors"
+                    className="w-8 h-8 rounded-full flex items-center justify-center text-zinc-400 hover:text-black hover:bg-zinc-50 transition-colors"
                   >
                     <Minus size={12} />
                   </button>
                   <span className="text-xs font-bold text-black">{quantity}</span>
                   <button 
                     onClick={() => setQuantity(prev => prev + 1)}
-                    className="px-3 py-2 text-gray-400 hover:text-black transition-colors"
+                    className="w-8 h-8 rounded-full flex items-center justify-center text-zinc-400 hover:text-black hover:bg-zinc-50 transition-colors"
                   >
                     <Plus size={12} />
                   </button>
@@ -499,40 +623,24 @@ const ProductDetailsPage: React.FC = () => {
 
             {/* CTAs */}
             <div className="flex flex-col gap-3 mb-8">
-              <div className="flex flex-col sm:flex-row gap-3">
+              <div className="flex gap-3">
                 <button 
                   onClick={handleAddToBag}
-                  className="flex-grow bg-black text-white hover:bg-zinc-800 transition-all text-xs font-bold uppercase tracking-widest py-4.5 flex items-center justify-center space-x-3.5"
+                  className="flex-grow bg-transparent hover:bg-zinc-50 text-black border border-black transition-all duration-300 text-xs font-bold uppercase tracking-widest py-4 rounded-full flex items-center justify-center space-x-3"
                 >
                   <ShoppingBag size={16} />
                   <span>Add to Bag</span>
                 </button>
-                <button className="border border-gray-200 text-black hover:border-black transition-colors px-6 py-4.5 flex items-center justify-center">
+                <button className="border border-zinc-200 hover:border-black hover:bg-zinc-50 text-black transition-colors px-6 py-4 rounded-full flex items-center justify-center">
                   <Heart size={18} />
                 </button>
               </div>
               <button 
                 onClick={handleBuyItNow}
-                className="w-full bg-[#B91C1C] text-white hover:bg-[#A11717] transition-all text-xs font-bold uppercase tracking-widest py-4.5 flex items-center justify-center"
+                className="w-full bg-[#B91C1C] text-white hover:bg-[#A11717] transition-all duration-300 text-xs font-bold uppercase tracking-widest py-4 rounded-full flex items-center justify-center shadow-lg shadow-red-700/10"
               >
                 Buy It Now
               </button>
-            </div>
-
-            {/* Highlights / Features Banner */}
-            <div className="grid grid-cols-3 gap-2 border-t border-gray-100 py-6 text-center">
-              <div className="flex flex-col items-center">
-                <Truck size={18} strokeWidth={1.5} className="text-gray-400 mb-1" />
-                <span className="text-[9px] font-bold uppercase tracking-widest text-gray-600">Free Shipping</span>
-              </div>
-              <div className="flex flex-col items-center">
-                <RefreshCw size={18} strokeWidth={1.5} className="text-gray-400 mb-1" />
-                <span className="text-[9px] font-bold uppercase tracking-widest text-gray-600">15-Day Return</span>
-              </div>
-              <div className="flex flex-col items-center">
-                <ShieldCheck size={18} strokeWidth={1.5} className="text-gray-400 mb-1" />
-                <span className="text-[9px] font-bold uppercase tracking-widest text-gray-600">100% Genuine</span>
-              </div>
             </div>
 
             {/* Dynamic Specs Accordion */}
@@ -540,13 +648,13 @@ const ProductDetailsPage: React.FC = () => {
               <div className="border-b border-gray-100 pb-3">
                 <button 
                   onClick={() => setActiveAccordion(activeAccordion === 'description' ? '' : 'description')}
-                  className="w-full flex items-center justify-between text-[10px] font-extrabold uppercase tracking-widest text-black text-left"
+                  className="w-full flex items-center justify-between text-[10px] font-extrabold uppercase tracking-widest text-black text-left py-2"
                 >
                   <span>Description</span>
                   <Plus size={12} className={`transition-transform ${activeAccordion === 'description' ? 'rotate-45' : ''}`} />
                 </button>
                 {activeAccordion === 'description' && (
-                  <div className="mt-3 text-xs leading-relaxed text-gray-500 font-medium">
+                  <div className="mt-2 text-xs leading-relaxed text-gray-500 font-medium">
                     {product.description || "No description available for this premium ShivaStyle garment."}
                   </div>
                 )}
@@ -555,21 +663,51 @@ const ProductDetailsPage: React.FC = () => {
               <div className="border-b border-gray-100 py-3">
                 <button 
                   onClick={() => setActiveAccordion(activeAccordion === 'details' ? '' : 'details')}
-                  className="w-full flex items-center justify-between text-[10px] font-extrabold uppercase tracking-widest text-black text-left"
+                  className="w-full flex items-center justify-between text-[10px] font-extrabold uppercase tracking-widest text-black text-left py-1"
                 >
                   <span>Product Specifications</span>
                   <Plus size={12} className={`transition-transform ${activeAccordion === 'details' ? 'rotate-45' : ''}`} />
                 </button>
                 {activeAccordion === 'details' && (
                   <div className="mt-3 text-xs leading-relaxed text-gray-500 font-medium space-y-1">
-                    <p><strong className="text-black font-semibold uppercase tracking-wider text-[9px]">Material:</strong> 100% Pure Organic Cotton</p>
-                    <p><strong className="text-black font-semibold uppercase tracking-wider text-[9px]">Care instructions:</strong> Machine Wash Cold / Dry Low</p>
-                    <p><strong className="text-black font-semibold uppercase tracking-wider text-[9px]">Fit:</strong> Tailored Fit for Indian Standard Silhouette</p>
-                    <p><strong className="text-black font-semibold uppercase tracking-wider text-[9px]">Country of origin:</strong> Crafted with Pride in India</p>
+                    {(product.material && product.material !== 'null') ? (
+                      <p><strong className="text-black font-semibold uppercase tracking-wider text-[9px]">Material:</strong> {product.material}</p>
+                    ) : (
+                      <p><strong className="text-black font-semibold uppercase tracking-wider text-[9px]">Material:</strong> 100% Pure Organic Cotton</p>
+                    )}
+                    {(product.care_instructions && product.care_instructions !== 'null') ? (
+                      <p><strong className="text-black font-semibold uppercase tracking-wider text-[9px]">Care instructions:</strong> {product.care_instructions}</p>
+                    ) : (
+                      <p><strong className="text-black font-semibold uppercase tracking-wider text-[9px]">Care instructions:</strong> Machine Wash Cold / Dry Low</p>
+                    )}
+                    {(product.fit && product.fit !== 'null') ? (
+                      <p><strong className="text-black font-semibold uppercase tracking-wider text-[9px]">Fit:</strong> {product.fit}</p>
+                    ) : (
+                      <p><strong className="text-black font-semibold uppercase tracking-wider text-[9px]">Fit:</strong> Tailored Fit for Indian Standard Silhouette</p>
+                    )}
+                    {(product.country_of_origin && product.country_of_origin !== 'null') ? (
+                      <p><strong className="text-black font-semibold uppercase tracking-wider text-[9px]">Country of origin:</strong> {product.country_of_origin}</p>
+                    ) : (
+                      <p><strong className="text-black font-semibold uppercase tracking-wider text-[9px]">Country of origin:</strong> Crafted with Pride in India</p>
+                    )}
                   </div>
                 )}
               </div>
             </div>
+
+            {/* Tags */}
+            {product.tags && (
+              <div className="flex flex-wrap gap-1.5 mt-6 border-t border-zinc-100 pt-4">
+                {product.tags.split(',').map((tag: string) => (
+                  <span 
+                    key={tag}
+                    className="text-[9px] font-bold uppercase tracking-wider text-zinc-500 bg-zinc-50 px-2.5 py-1 rounded-full border border-zinc-100"
+                  >
+                    #{tag.trim()}
+                  </span>
+                ))}
+              </div>
+            )}
 
           </div>
         </div>
@@ -589,6 +727,75 @@ const ProductDetailsPage: React.FC = () => {
         )}
 
       </div>
+
+      {/* Size Chart Modal */}
+      {isSizeChartOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm transition-all duration-300">
+          <div className="bg-white max-w-lg w-full mx-4 p-8 rounded-2xl border border-zinc-100 shadow-2xl relative animate-in fade-in zoom-in duration-200">
+            <button 
+              onClick={() => setIsSizeChartOpen(false)}
+              className="absolute top-4 right-4 text-zinc-400 hover:text-black p-2 transition-colors"
+            >
+              <Plus className="rotate-45" size={24} />
+            </button>
+            <h3 className="text-lg font-bold uppercase tracking-wider text-black mb-1">Size Guide</h3>
+            <p className="text-xs text-zinc-500 mb-6 font-medium">Standard measurements in inches. Fit may vary depending on style and fabric.</p>
+            
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-zinc-100 bg-zinc-50">
+                    <th className="p-3 font-semibold uppercase tracking-wider text-[10px] text-zinc-500">Size</th>
+                    <th className="p-3 font-semibold uppercase tracking-wider text-[10px] text-zinc-500">Waist (in)</th>
+                    <th className="p-3 font-semibold uppercase tracking-wider text-[10px] text-zinc-500">Chest (in)</th>
+                    <th className="p-3 font-semibold uppercase tracking-wider text-[10px] text-zinc-500">Length (in)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-100 font-medium">
+                  <tr>
+                    <td className="p-3 text-black font-bold">S</td>
+                    <td className="p-3 text-zinc-600">28 - 30</td>
+                    <td className="p-3 text-zinc-600">34 - 36</td>
+                    <td className="p-3 text-zinc-600">27</td>
+                  </tr>
+                  <tr className="bg-zinc-50/50">
+                    <td className="p-3 text-black font-bold">M</td>
+                    <td className="p-3 text-zinc-600">31 - 33</td>
+                    <td className="p-3 text-zinc-600">38 - 40</td>
+                    <td className="p-3 text-zinc-600">28</td>
+                  </tr>
+                  <tr>
+                    <td className="p-3 text-black font-bold">L</td>
+                    <td className="p-3 text-zinc-600">34 - 36</td>
+                    <td className="p-3 text-zinc-600">42 - 44</td>
+                    <td className="p-3 text-zinc-600">29</td>
+                  </tr>
+                  <tr className="bg-zinc-50/50">
+                    <td className="p-3 text-black font-bold">XL</td>
+                    <td className="p-3 text-zinc-600">38 - 40</td>
+                    <td className="p-3 text-zinc-600">46 - 48</td>
+                    <td className="p-3 text-zinc-600">30</td>
+                  </tr>
+                  <tr>
+                    <td className="p-3 text-black font-bold">XXL</td>
+                    <td className="p-3 text-zinc-600">42 - 44</td>
+                    <td className="p-3 text-zinc-600">50 - 52</td>
+                    <td className="p-3 text-zinc-600">31.5</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            
+            <div className="mt-6 bg-zinc-50 p-4 rounded-xl border border-zinc-100">
+              <h4 className="text-[10px] font-bold uppercase tracking-wider text-black mb-1">How to Measure</h4>
+              <p className="text-[11px] text-zinc-500 leading-relaxed font-medium">
+                <strong>Chest:</strong> Measure around the fullest part of your chest, keeping the tape horizontal.<br/>
+                <strong>Waist:</strong> Measure around your natural waistline, where your belt usually sits.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

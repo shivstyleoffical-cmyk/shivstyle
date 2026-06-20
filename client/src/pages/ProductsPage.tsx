@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { useSearchParams, useParams, useNavigate } from 'react-router-dom';
+import { useSearchParams, useParams, useNavigate, useLocation } from 'react-router-dom';
 import { fetchProducts, fetchCategories } from '../services/api';
 import ProductCard from '../components/ui/ProductCard';
 import { Filter, X, Search as SearchIcon, ChevronDown, ChevronUp } from 'lucide-react';
+import SEO from '../components/common/SEO';
 
 const ProductsPage: React.FC = () => {
   const { categoryId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const isSalePage = location.pathname === '/sale';
 
   const [categories, setCategories] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
@@ -165,6 +168,7 @@ const ProductsPage: React.FC = () => {
         if (colorsParam) params.colors = colorsParam;
         if (fabricParam) params.fabric = fabricParam;
         if (sleevesParam) params.sleeves = sleevesParam;
+        if (isSalePage) params.is_on_sale = 'true';
 
         const data = await fetchProducts(params);
         setProducts(data.products || []);
@@ -183,7 +187,7 @@ const ProductsPage: React.FC = () => {
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [searchParam, selectedCategory, sortBy, sortOrder, minPriceParam, maxPriceParam, sizesParam, colorsParam, fabricParam, sleevesParam]);
+  }, [searchParam, selectedCategory, sortBy, sortOrder, minPriceParam, maxPriceParam, sizesParam, colorsParam, fabricParam, sleevesParam, isSalePage]);
 
   const handleCategoryClick = (cat: any) => {
     const newParams = new URLSearchParams(searchParams);
@@ -338,15 +342,32 @@ const ProductsPage: React.FC = () => {
     navigate('/products');
   };
 
+  const pageTitle = isSalePage 
+    ? 'Sale Collection' 
+    : categoryId 
+      ? `${categoryId.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')} Collection` 
+      : 'All Collections';
+
+  const pageDescription = isSalePage
+    ? 'Shop the biggest discounts on premium streetwear at ShivStyle. Heavy offers on limited pieces, pure cotton t-shirts, jackets, and accessories.'
+    : categoryId
+      ? `Discover premium ${categoryId.replace('-', ' ')} collection at ShivStyle. Handcrafted apparel, standard fits, and high-fashion aesthetics.`
+      : 'Browse the entire collection of premium streetwear, tees, bottom wear, and accessories at ShivStyle Official.';
+
   return (
     <div className="bg-white min-h-screen pt-10 pb-20">
+      <SEO 
+        title={pageTitle}
+        description={pageDescription}
+        keywords={`shivstyle, ${pageTitle.toLowerCase()}, premium streetwear, clothing`}
+      />
       <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8">
 
         {/* Header & Mobile Filter Toggle */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 border-b border-gray-200 pb-6">
           <div>
             <h1 className="text-3xl font-black uppercase tracking-tight text-black mb-2">
-              {categoryId ? `${categoryId.replace('-', ' ')} Collection` : 'All Collections'}
+              {isSalePage ? 'Sale Collection' : categoryId ? `${categoryId.replace('-', ' ')} Collection` : 'All Collections'}
             </h1>
             <p className="text-sm text-gray-500 font-medium">Showing {products.length} of {totalProducts} products</p>
           </div>
@@ -408,12 +429,12 @@ const ProductsPage: React.FC = () => {
                   )}
                   {minPriceParam && (
                     <span className="inline-flex items-center bg-gray-100 text-[10px] font-bold uppercase tracking-wider text-black px-2 py-1">
-                      Min: ${minPriceParam}
+                      Min: ₹{minPriceParam}
                     </span>
                   )}
                   {maxPriceParam && (
                     <span className="inline-flex items-center bg-gray-100 text-[10px] font-bold uppercase tracking-wider text-black px-2 py-1">
-                      Max: ${maxPriceParam}
+                      Max: ₹{maxPriceParam}
                     </span>
                   )}
                   {selectedSizes.map(s => (
@@ -554,7 +575,7 @@ const ProductsPage: React.FC = () => {
                 <div className="flex items-center space-x-2 mt-4">
                   <input
                     type="number"
-                    placeholder="Min $"
+                    placeholder="Min ₹"
                     value={minPriceInput}
                     onChange={(e) => setMinPriceInput(e.target.value)}
                     className="w-full border border-gray-200 px-3 py-2 text-xs focus:outline-none focus:border-black rounded-none"
@@ -562,7 +583,7 @@ const ProductsPage: React.FC = () => {
                   <span className="text-gray-400 text-xs">-</span>
                   <input
                     type="number"
-                    placeholder="Max $"
+                    placeholder="Max ₹"
                     value={maxPriceInput}
                     onChange={(e) => setMaxPriceInput(e.target.value)}
                     className="w-full border border-gray-200 px-3 py-2 text-xs focus:outline-none focus:border-black rounded-none"

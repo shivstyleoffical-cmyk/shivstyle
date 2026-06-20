@@ -109,10 +109,12 @@ const Products: React.FC = () => {
       dataIndex: 'images',
       key: 'image',
       width: 70,
-      render: (images: any[]) => (
+      render: (images: any[], record: Product) => (
         <div className="w-10 h-10 rounded border border-gray-200 overflow-hidden bg-gray-50 flex items-center justify-center flex-shrink-0">
           {images && images.length > 0 ? (
             <img src={images[0].image_url} alt="" className="w-full h-full object-cover" />
+          ) : record.image_url ? (
+            <img src={record.image_url} alt="" className="w-full h-full object-cover" />
           ) : (
             <ShoppingOutlined className="text-gray-300 text-lg" />
           )}

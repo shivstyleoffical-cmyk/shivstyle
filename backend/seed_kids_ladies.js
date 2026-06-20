@@ -1,6 +1,7 @@
 import sequelize from './src/database/connection.js';
 import Category from './src/modules/category/category.model.js';
 import Product from './src/modules/product/product.model.js';
+import ProductVariant from './src/modules/product/product-variant.model.js';
 import './src/database/associations.js';
 
 const createSlug = (name) => {
@@ -143,9 +144,9 @@ const seedNewCategories = async () => {
             const category = createdCategories[prod.category];
             const slug = createSlug(prod.product_name);
             
-            const existingProduct = await Product.findOne({ where: { url_slug: slug } });
+            let existingProduct = await Product.findOne({ where: { url_slug: slug } });
             if (!existingProduct) {
-                await Product.create({
+                const product = await Product.create({
                     product_name: prod.product_name,
                     url_slug: slug,
                     category_id: category.id,
@@ -167,6 +168,26 @@ const seedNewCategories = async () => {
                     updatedAt: new Date()
                 });
                 console.log(`  ✓ Created product: ${prod.product_name}`);
+
+                // Seed default variants (sizes S, M, L, XL, XXL)
+                const sizes = ['S', 'M', 'L', 'XL', 'XXL'];
+                for (const size of sizes) {
+                    await ProductVariant.create({
+                        product_id: product.id,
+                        variant_name: `Size - ${size}`,
+                        variant_value: size,
+                        size: size,
+                        color: null,
+                        price: product.price,
+                        price_adjustment: 0,
+                        stock_quantity: 50,
+                        sku: `${slug.substring(0, 10).toUpperCase()}-${size}`,
+                        status: 'active',
+                        createdAt: new Date(),
+                        updatedAt: new Date()
+                    });
+                }
+                console.log(`    ✓ Created default variants for product: ${prod.product_name}`);
             } else {
                 console.log(`  ✓ Product already exists: ${prod.product_name}`);
             }

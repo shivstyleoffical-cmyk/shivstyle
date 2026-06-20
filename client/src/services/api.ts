@@ -29,4 +29,9 @@ export const fetchRecommendedProducts = async (params = {}) => {
   return response.data;
 };
 
+export const searchProducts = async (params = {}) => {
+  const response = await api.get('/products/search', { params });
+  return response.data;
+};
+
 export default api;

@@ -313,7 +313,7 @@ const Dashboard: React.FC = () => {
                     <span className="text-xs font-bold text-brand-textPrimary">{product.sales} units</span>
                   </td>
                   <td className="py-6 text-center">
-                    <span className="text-xs font-black text-brand-accent">${product.revenue.toLocaleString()}</span>
+                    <span className="text-xs font-black text-brand-accent">₹{product.revenue.toLocaleString()}</span>
                   </td>
                   <td className="py-6 px-4 text-right">
                     <span className="bg-green-50 text-green-600 text-[9px] font-black px-3 py-1.5 rounded-lg border border-green-100 uppercase tracking-widest">

@@ -28,10 +28,10 @@ const Footer: React.FC = () => {
           <div>
             <h4 className="text-white font-bold mb-6 tracking-widest text-xs uppercase">Support</h4>
             <ul className="space-y-4">
-              <li><a href="#" className="text-gray-400 hover:text-white transition-colors text-sm">Contact Us</a></li>
-              <li><a href="#" className="text-gray-400 hover:text-white transition-colors text-sm">FAQs</a></li>
-              <li><a href="#" className="text-gray-400 hover:text-white transition-colors text-sm">Shipping</a></li>
-              <li><a href="#" className="text-gray-400 hover:text-white transition-colors text-sm">Returns</a></li>
+              <li><Link to="/support/contact" className="text-gray-400 hover:text-white transition-colors text-sm">Contact Us</Link></li>
+              <li><Link to="/support/faq" className="text-gray-400 hover:text-white transition-colors text-sm">FAQs</Link></li>
+              <li><Link to="/support/shipping" className="text-gray-400 hover:text-white transition-colors text-sm">Shipping</Link></li>
+              <li><Link to="/support/returns" className="text-gray-400 hover:text-white transition-colors text-sm">Returns</Link></li>
             </ul>
           </div>
         </div>
@@ -41,8 +41,8 @@ const Footer: React.FC = () => {
             © 2026 SHIVSTYLE. All rights reserved.
           </p>
           <div className="flex space-x-6">
-            <a href="#" className="text-gray-500 hover:text-white transition-colors text-xs font-bold uppercase tracking-widest">Privacy</a>
-            <a href="#" className="text-gray-500 hover:text-white transition-colors text-xs font-bold uppercase tracking-widest">Terms</a>
+            <Link to="/privacy" className="text-gray-500 hover:text-white transition-colors text-xs font-bold uppercase tracking-widest">Privacy</Link>
+            <Link to="/terms" className="text-gray-500 hover:text-white transition-colors text-xs font-bold uppercase tracking-widest">Terms</Link>
           </div>
         </div>
       </div>

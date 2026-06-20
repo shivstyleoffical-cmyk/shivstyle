@@ -1,7 +1,6 @@
 import axios from 'axios';
 
-// Connect to local backend by default
-const API_BASE_URL = 'http://localhost:6006/api';
+const API_BASE_URL = (import.meta.env.VITE_API_URL as string) || 'http://localhost:6006/api';
 
 const api = axios.create({
   baseURL: API_BASE_URL,

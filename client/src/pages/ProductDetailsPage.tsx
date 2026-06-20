@@ -1,10 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ShoppingBag, Heart, Star, ChevronRight, Truck, RefreshCw, ShieldCheck, Plus, Minus } from 'lucide-react';
-import { fetchProductBySlug, fetchRecommendedProducts } from '../services/api';
+import api, { fetchProductBySlug, fetchRecommendedProducts } from '../services/api';
 import { useCart } from '../context/CartContext';
 import ProductCard from '../components/ui/ProductCard';
-import axios from 'axios';
 
 const loadRazorpayScript = (): Promise<boolean> => {
   return new Promise((resolve) => {
@@ -206,7 +205,7 @@ const ProductDetailsPage: React.FC = () => {
     setLoading(true);
 
     try {
-      const response = await axios.post('http://localhost:6006/api/checkout/initiate', {
+      const response = await api.post('/checkout/initiate', {
         items: [{
           id: product.id,
           variantId: selectedVariantId,
@@ -233,7 +232,7 @@ const ProductDetailsPage: React.FC = () => {
           handler: async (paymentRes: any) => {
             setLoading(true);
             try {
-              const verifyRes = await axios.post('http://localhost:6006/api/checkout/verify', {
+              const verifyRes = await api.post('/checkout/verify', {
                 orderId: data.orderId,
                 razorpayPaymentId: paymentRes.razorpay_payment_id,
                 razorpayOrderId: paymentRes.razorpay_order_id,
@@ -271,7 +270,7 @@ const ProductDetailsPage: React.FC = () => {
           console.log("Mock key detected. Simulating checkout verification...");
           setTimeout(async () => {
             try {
-              const verifyRes = await axios.post('http://localhost:6006/api/checkout/verify', {
+              const verifyRes = await api.post('/checkout/verify', {
                 orderId: data.orderId,
                 razorpayPaymentId: 'pay_mock_' + Math.random().toString(36).substring(2, 12),
                 razorpayOrderId: data.razorpayOrderId,

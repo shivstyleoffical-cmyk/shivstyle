@@ -28,7 +28,7 @@ const config = {
     port: parseInt(getEnv('DB_PORT', '5432'), 10),
     username: getEnv('DB_USER', ''),
     password: getEnv('DB_PASSWORD', ''),
-    database: getEnv('DB_NAME', 'ecommerce_w6oi'),
+    database: getEnv('DB_NAME', 'shivstyple'),
     ssl: getEnv('DB_SSL', 'false') === 'true',
   },
   apiUrl: getEnv('API_URL', 'http://localhost:6006'),

@@ -1,8 +1,7 @@
 import pg from 'pg';
 const { Client } = pg;
 
-// Added ?ssl=true to the URL
-const connectionString = 'postgresql://ecommerce_w6oi_user:tyVntRvSx7mDNz8OvY2Rrx0W5nEEUdQh@dpg-d5v1tol6ubrc73c4ifdg-a.oregon-postgres.render.com/ecommerce_w6oi?ssl=true';
+const connectionString = 'postgresql://shivstyple_user:ZTQBcn13EJBMXdjdJBON2XenbdvoQSHr@dpg-d8r092m7r5hc73dnukeg-a.virginia-postgres.render.com/shivstyple?ssl=true';
 
 const client = new Client({
     connectionString: connectionString,

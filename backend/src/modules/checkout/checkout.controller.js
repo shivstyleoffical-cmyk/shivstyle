@@ -128,11 +128,18 @@ export const initiateCheckout = async (req, res, next) => {
                 }
             }
 
+            const cleanDescription = prod.description 
+                ? prod.description.replace(/<[^>]*>/g, '').substring(0, 120).trim()
+                : 'Premium streetwear apparel from ShivStyle.';
+
             dbItems.push({
                 product_id: prod.id,
                 product_variant_id: item.variantId || null,
                 quantity: item.quantity,
-                price: price
+                price: price,
+                name: prod.product_name || 'ShivStyle Item',
+                description: cleanDescription || 'Premium streetwear apparel.',
+                image_url: prod.image_url || 'https://www.shivstyles.in/logo.png'
             });
         }
 
@@ -191,10 +198,13 @@ export const initiateCheckout = async (req, res, next) => {
             const itemPriceInPaise = Math.round(item.price * 100);
             return {
                 sku: String(item.product_variant_id || item.product_id),
-                variant_id: item.product_variant_id ? String(item.product_variant_id) : '',
+                variant_id: String(item.product_variant_id || item.product_id),
+                name: String(item.name || 'ShivStyle Item'),
                 price: itemPriceInPaise,
                 offer_price: itemPriceInPaise,
-                quantity: Number(item.quantity)
+                quantity: Number(item.quantity),
+                description: String(item.description || 'Premium streetwear apparel.'),
+                image_url: String(item.image_url)
             };
         });
 

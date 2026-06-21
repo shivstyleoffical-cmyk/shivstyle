@@ -192,7 +192,8 @@ export const initiateCheckout = async (req, res, next) => {
                 amount: amountInPaisa,
                 currency: 'INR',
                 receipt: order.order_number,
-                payment_capture: 1
+                payment_capture: 1,
+                line_items_total: amountInPaisa
             };
 
             const razorpayOrder = await razorpay.orders.create(razorpayOptions);

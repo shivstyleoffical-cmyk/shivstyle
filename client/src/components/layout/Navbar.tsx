@@ -728,6 +728,8 @@ const Navbar: React.FC = () => {
                               name: 'ShivStyle Checkout',
                               description: `Order ${data.orderNumber}`,
                               order_id: data.razorpayOrderId,
+                              one_click_checkout: true, // Enables Magic Checkout
+                              show_address: true, // Asks for address inside Magic Checkout modal
                               handler: async (paymentRes: any) => {
                                 try {
                                   const verifyRes = await api.post('/checkout/verify', {

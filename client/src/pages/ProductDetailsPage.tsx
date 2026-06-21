@@ -272,6 +272,8 @@ const ProductDetailsPage: React.FC = () => {
           name: 'ShivStyle Checkout',
           description: `Order ${data.orderNumber}`,
           order_id: data.razorpayOrderId,
+          one_click_checkout: true,
+          show_address: true,
           handler: async (paymentRes: any) => {
             setLoading(true);
             try {

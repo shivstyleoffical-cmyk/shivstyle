@@ -115,7 +115,10 @@ class OrderService {
                 }
             }
 
-            const itemPrice = variant ? parseFloat(variant.price) : parseFloat(product.price);
+            const basePrice = parseFloat(product.price) || 0;
+            const itemPrice = variant
+                ? basePrice + parseFloat(variant.price_adjustment || 0)
+                : basePrice;
             const stockQuantity = variant ? variant.stock_quantity : product.stock_quantity;
             const itemTotal = quantity * itemPrice;
 

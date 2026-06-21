@@ -173,7 +173,17 @@ export const initiateCheckout = async (req, res, next) => {
             use_coins: false
         });
 
-        const amountInPaisa = Math.round(parseFloat(order.net_amount) * 100);
+        // Calculate amount from items directly — order.net_amount may be null/0 from OrderService
+        const itemsTotal = dbItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+        const orderNetAmount = parseFloat(order.net_amount) || parseFloat(order.total_amount) || itemsTotal;
+        const amountInPaisa = Math.round(orderNetAmount * 100);
+
+        console.log(`[Checkout] Order amount: ₹${orderNetAmount} (${amountInPaisa} paise) | Items total: ₹${itemsTotal}`);
+
+        if (!amountInPaisa || amountInPaisa <= 0) {
+            return res.status(400).json({ success: false, message: 'Could not calculate order amount. Please try again.' });
+        }
+
         let razorpayOrderId = '';
         let isMock = false;
 
@@ -190,7 +200,8 @@ export const initiateCheckout = async (req, res, next) => {
             order.payment_transaction_id = razorpayOrderId;
             await order.save();
         } catch (rzpErr) {
-            console.warn("Razorpay order generation failed on checkout initiation, falling back to mock sandbox:", rzpErr.message);
+            const errMsg = rzpErr?.error?.description || rzpErr?.message || JSON.stringify(rzpErr);
+            console.warn("Razorpay order generation failed on checkout initiation, falling back to mock sandbox:", errMsg);
             razorpayOrderId = 'order_mock_' + Math.random().toString(36).substring(2, 12);
             order.payment_transaction_id = razorpayOrderId;
             await order.save();
@@ -376,7 +387,7 @@ export const verifyPayment = async (req, res, next) => {
             const user = await User.findByPk(order.user_id);
             if (user) {
                 user.name = 'Rajen Kumar';
-                user.email = 'rajen.test@gmail.com';
+                user.email = 'rajen.test_' + Math.random().toString(36).substring(2, 10) + '@gmail.com';
                 user.phone = '9876543210';
                 user.is_verified = true;
                 await user.save();
@@ -422,30 +433,46 @@ export const verifyPayment = async (req, res, next) => {
             let customerDetails = { name: 'Guest Customer', email: null, phone: null };
 
             try {
-                // Query Razorpay order endpoint
+                // Query Razorpay ORDER endpoint — Magic Checkout stores address in customer_details
                 const rzpOrderDetails = await razorpay.orders.fetch(razorpayOrderId);
-                if (rzpOrderDetails && rzpOrderDetails.shipping_address) {
-                    shippingAddress = rzpOrderDetails.shipping_address;
+                console.log('[verifyPayment] Razorpay order customer_details:', JSON.stringify(rzpOrderDetails?.customer_details));
+
+                // Magic Checkout puts address & identity under customer_details
+                const custDetails = rzpOrderDetails?.customer_details;
+                if (custDetails) {
+                    customerDetails.name = custDetails.name || customerDetails.name;
+                    customerDetails.email = custDetails.email || customerDetails.email;
+                    customerDetails.phone = custDetails.contact || customerDetails.phone;
+
+                    // Prefer shipping_address, fall back to billing_address
+                    const rzpAddress = custDetails.shipping_address || custDetails.billing_address;
+                    if (rzpAddress) {
+                        shippingAddress = rzpAddress;
+                    }
                 }
 
-                // Query Razorpay payment endpoint for contact fallback
+                // Also query the PAYMENT endpoint for any remaining fields
                 const rzpPaymentDetails = await razorpay.payments.fetch(razorpayPaymentId);
                 if (rzpPaymentDetails) {
-                    customerDetails.name = rzpPaymentDetails.notes?.name || rzpPaymentDetails.email?.split('@')[0] || 'Customer';
-                    customerDetails.email = rzpPaymentDetails.email;
-                    customerDetails.phone = rzpPaymentDetails.contact;
+                    // Only override if not already set by order customer_details
+                    if (!customerDetails.email && rzpPaymentDetails.email) {
+                        customerDetails.email = rzpPaymentDetails.email;
+                    }
+                    if (!customerDetails.phone && rzpPaymentDetails.contact) {
+                        customerDetails.phone = rzpPaymentDetails.contact;
+                    }
+                    if (!customerDetails.name || customerDetails.name === 'Guest Customer') {
+                        customerDetails.name = rzpPaymentDetails.notes?.name ||
+                            rzpPaymentDetails.email?.split('@')[0] ||
+                            customerDetails.name;
+                    }
 
+                    // Fallback: address from payment notes
                     if (!shippingAddress && rzpPaymentDetails.notes?.shipping_address) {
                         try {
-                            const parsedAddress = JSON.parse(rzpPaymentDetails.notes.shipping_address);
-                            shippingAddress = parsedAddress;
+                            shippingAddress = JSON.parse(rzpPaymentDetails.notes.shipping_address);
                         } catch (e) {
-                            shippingAddress = {
-                                line1: rzpPaymentDetails.notes.shipping_address,
-                                city: 'Pending',
-                                state: 'Pending',
-                                postal_code: '000000'
-                            };
+                            shippingAddress = { line1: rzpPaymentDetails.notes.shipping_address, city: 'Pending', state: 'Pending', postal_code: '000000' };
                         }
                     }
                 }
@@ -467,16 +494,18 @@ export const verifyPayment = async (req, res, next) => {
             const shippingRecord = await OrderShippingAddress.findOne({ where: { order_id: orderId } });
             if (shippingRecord) {
                 if (shippingAddress) {
-                    shippingRecord.full_name = customerDetails.name || 'Customer';
+                    // Magic Checkout uses: line1, line2, zipcode, name, primary (city), secondary (state)
+                    shippingRecord.full_name = shippingAddress.name || customerDetails.name || 'Customer';
                     shippingRecord.address_line1 = shippingAddress.line1 || shippingAddress.address_line1 || 'Provided on checkout';
                     shippingRecord.address_line2 = shippingAddress.line2 || shippingAddress.address_line2 || '';
-                    shippingRecord.city = shippingAddress.city || 'Provided on checkout';
-                    shippingRecord.state = shippingAddress.state || 'Provided on checkout';
-                    shippingRecord.postal_code = shippingAddress.postal_code || shippingAddress.pincode || '000000';
+                    shippingRecord.city = shippingAddress.city || shippingAddress.primary || 'Provided on checkout';
+                    shippingRecord.state = shippingAddress.state || shippingAddress.secondary || 'Provided on checkout';
+                    shippingRecord.postal_code = shippingAddress.zipcode || shippingAddress.postal_code || shippingAddress.pincode || '000000';
                     shippingRecord.phone = customerDetails.phone || '0000000000';
                 } else {
-                    shippingRecord.full_name = customerDetails.name || 'Customer';
-                    shippingRecord.phone = customerDetails.phone || '0000000000';
+                    // At minimum update name and phone from payment details
+                    shippingRecord.full_name = customerDetails.name || shippingRecord.full_name;
+                    shippingRecord.phone = customerDetails.phone || shippingRecord.phone;
                 }
                 await shippingRecord.save();
             }
@@ -544,5 +573,127 @@ export const handleWebhook = async (req, res, next) => {
     } catch (error) {
         console.error("Webhook processing failed:", error);
         return res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+/**
+ * Razorpay Magic Checkout Shipping Info API
+ * Called by Razorpay to retrieve shipping serviceability, methods, fees, and COD availability.
+ */
+export const getMagicShippingInfo = async (req, res, next) => {
+    try {
+        const { order_id, address } = req.body;
+        console.log(`[Magic Checkout] Shipping Info requested for Razorpay Order ID: ${order_id}`, address);
+
+        // Find the local pending order using the Razorpay order ID
+        const order = await Order.findOne({
+            where: { payment_transaction_id: order_id }
+        });
+
+        let shippingFee = 9900; // Default shipping fee: ₹99 (9900 paise)
+        if (order) {
+            const netAmount = parseFloat(order.net_amount || 0);
+            // Free shipping on orders over ₹999
+            if (netAmount >= 999) {
+                shippingFee = 0;
+            }
+        }
+
+        // Return the expected shipping methods format
+        return res.status(200).json({
+            success: true,
+            shipping_methods: [
+                {
+                    id: 'standard_delivery',
+                    name: 'Standard Delivery',
+                    description: 'Delivery within 3-5 business days',
+                    shipping_fee: shippingFee,
+                    cod_serviceable: true,
+                    cod_fee: 0
+                }
+            ]
+        });
+    } catch (error) {
+        console.error('[Magic Checkout] Shipping Info error:', error);
+        // Fallback response to avoid blocking checkout
+        return res.status(200).json({
+            success: true,
+            shipping_methods: [
+                {
+                    id: 'standard_delivery',
+                    name: 'Standard Delivery',
+                    shipping_fee: 0,
+                    cod_serviceable: true,
+                    cod_fee: 0
+                }
+            ]
+        });
+    }
+};
+
+/**
+ * Razorpay Magic Checkout Get Promotions API
+ * Called by Razorpay to list all active coupons to the user.
+ */
+export const getMagicPromotions = async (req, res, next) => {
+    try {
+        return res.status(200).json({
+            success: true,
+            promotions: [
+                {
+                    id: 'FIRST10',
+                    summary: '10% off on your first order',
+                    description: 'Use code FIRST10 to get 10% discount on cart value'
+                }
+            ]
+        });
+    } catch (error) {
+        console.error('[Magic Checkout] Get Promotions error:', error);
+        return res.status(200).json({ success: true, promotions: [] });
+    }
+};
+
+/**
+ * Razorpay Magic Checkout Apply Promotion API
+ * Validates the entered coupon code and returns the discount amount.
+ */
+export const applyMagicPromotion = async (req, res, next) => {
+    try {
+        const { order_id, code } = req.body;
+        console.log(`[Magic Checkout] Applying coupon: ${code} to Razorpay Order: ${order_id}`);
+
+        const order = await Order.findOne({
+            where: { payment_transaction_id: order_id }
+        });
+
+        if (!order) {
+            return res.status(404).json({ success: false, message: 'Order not found' });
+        }
+
+        if (code && code.toUpperCase() === 'FIRST10') {
+            const netAmount = parseFloat(order.net_amount || 0);
+            const discountAmount = Math.round(netAmount * 0.10); // 10% discount
+            const discountInPaise = discountAmount * 100;
+
+            return res.status(200).json({
+                success: true,
+                promotion: {
+                    reference_id: 'FIRST10',
+                    code: 'FIRST10',
+                    type: 'coupon',
+                    value: discountInPaise,
+                    value_type: 'fixed_amount',
+                    description: '10% discount applied successfully'
+                }
+            });
+        }
+
+        return res.status(400).json({
+            success: false,
+            message: 'Invalid coupon code'
+        });
+    } catch (error) {
+        console.error('[Magic Checkout] Apply Promotion error:', error);
+        return res.status(500).json({ success: false, message: 'Internal server error' });
     }
 };

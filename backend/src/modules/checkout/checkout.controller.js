@@ -187,13 +187,25 @@ export const initiateCheckout = async (req, res, next) => {
         let razorpayOrderId = '';
         let isMock = false;
 
+        const lineItems = dbItems.map(item => {
+            const itemPriceInPaise = Math.round(item.price * 100);
+            return {
+                sku: String(item.product_variant_id || item.product_id),
+                variant_id: item.product_variant_id ? String(item.product_variant_id) : '',
+                price: itemPriceInPaise,
+                offer_price: itemPriceInPaise,
+                quantity: Number(item.quantity)
+            };
+        });
+
         try {
             const razorpayOptions = {
                 amount: amountInPaisa,
                 currency: 'INR',
                 receipt: order.order_number,
                 payment_capture: 1,
-                line_items_total: amountInPaisa
+                line_items_total: amountInPaisa,
+                line_items: lineItems
             };
 
             const razorpayOrder = await razorpay.orders.create(razorpayOptions);

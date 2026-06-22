@@ -628,6 +628,17 @@ export const getMagicShippingInfo = async (req, res, next) => {
 
         const { order_id, addresses, customer } = req.body;
 
+        // Fetch shipping fee from order in database (which includes the shipping fee calculated during order creation)
+        let shippingFeeInPaise = 5000; // default to ₹50 (5000 paise)
+        if (order_id) {
+            const order = await Order.findOne({
+                where: { payment_transaction_id: order_id }
+            });
+            if (order) {
+                shippingFeeInPaise = Math.round(parseFloat(order.shipping_amount || 0) * 100);
+            }
+        }
+
         // Razorpay sends 'addresses' as an array (not singular 'address')
         // We must return serviceability mapped to each address by its id
         if (Array.isArray(addresses) && addresses.length > 0) {
@@ -636,7 +647,7 @@ export const getMagicShippingInfo = async (req, res, next) => {
                 serviceable: true,
                 cod: true,
                 cod_fee: 0,
-                shipping_fee: 0
+                shipping_fee: shippingFeeInPaise
             }));
 
             const response = { addresses: responseAddresses };
@@ -649,7 +660,7 @@ export const getMagicShippingInfo = async (req, res, next) => {
             serviceable: true,
             cod: true,
             cod_fee: 0,
-            shipping_fee: 0
+            shipping_fee: shippingFeeInPaise
         };
         console.log('Shipping Response (flat fallback):', JSON.stringify(fallbackResponse, null, 2));
         return res.status(200).json(fallbackResponse);
@@ -661,7 +672,7 @@ export const getMagicShippingInfo = async (req, res, next) => {
             serviceable: true,
             cod: true,
             cod_fee: 0,
-            shipping_fee: 0
+            shipping_fee: 5000
         });
     }
 };

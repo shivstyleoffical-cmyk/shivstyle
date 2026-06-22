@@ -741,14 +741,13 @@ export const getMagicPromotions = async (req, res, next) => {
         });
 
         responseData = {
-            success: true,
             promotions
         };
         await logToDb('/api/checkout/promotions', req.method, req.headers, req.body, responseData);
         return res.status(200).json(responseData);
     } catch (error) {
         console.error('[Magic Checkout] Get Promotions error:', error);
-        responseData = { success: true, promotions: [] };
+        responseData = { promotions: [] };
         await logToDb('/api/checkout/promotions', req.method, req.headers, req.body, responseData);
         return res.status(200).json(responseData);
     }

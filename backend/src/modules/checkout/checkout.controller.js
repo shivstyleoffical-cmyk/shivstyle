@@ -214,7 +214,7 @@ export const initiateCheckout = async (req, res, next) => {
                 currency: 'INR',
                 receipt: order.order_number,
                 payment_capture: 1,
-                line_items_total: amountInPaisa,
+                line_items_total: Math.round(itemsTotal * 100),
                 line_items: lineItems
             };
 

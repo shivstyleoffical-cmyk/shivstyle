@@ -807,10 +807,6 @@ export const applyMagicPromotion = async (req, res, next) => {
             console.log(`[Magic Checkout] Coupon ${code} validated successfully. Discount: ₹${validation.discount_amount}`);
 
             responseData = {
-                success: true,
-                discount_amount: discountInPaise,
-                amount: discountInPaise,
-                message: `${validation.code} applied successfully`,
                 promotion: {
                     reference_id: validation.code,
                     code: validation.code,

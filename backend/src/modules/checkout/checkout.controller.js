@@ -601,46 +601,67 @@ export const handleWebhook = async (req, res, next) => {
 
 /**
  * Razorpay Magic Checkout Shipping Info API
- * Called by Razorpay to retrieve shipping serviceability, methods, fees, and COD availability.
+ * Called by Razorpay servers to check serviceability for each saved address.
+ *
+ * Razorpay REQUEST body:
+ * {
+ *   order_id: "order_xxx",
+ *   customer: { contact: "+91xxx", email: "x@x.com" },
+ *   addresses: [
+ *     { id: "addr_001", zipcode: "734001", country: "in", name: "...", line1: "..." },
+ *     { id: "addr_002", zipcode: "560001", country: "in", ... }
+ *   ]
+ * }
+ *
+ * Razorpay EXPECTED response:
+ * {
+ *   addresses: [
+ *     { id: "addr_001", serviceable: true, cod: true, cod_fee: 0, shipping_fee: 0 },
+ *     { id: "addr_002", serviceable: true, cod: true, cod_fee: 0, shipping_fee: 0 }
+ *   ]
+ * }
  */
 export const getMagicShippingInfo = async (req, res, next) => {
     try {
-        const { order_id, address } = req.body;
-        console.log(`[Magic Checkout] Shipping Info requested for Order: ${order_id}`, address?.zipcode);
+        // Log full request body for debugging
+        console.log('Razorpay Shipping Request:', JSON.stringify(req.body, null, 2));
 
-        // Return instantly without DB query — Razorpay has strict timeout on this endpoint
-        // Free shipping for all orders (simplest reliable response)
-        return res.status(200).json({
+        const { order_id, addresses, customer } = req.body;
+
+        // Razorpay sends 'addresses' as an array (not singular 'address')
+        // We must return serviceability mapped to each address by its id
+        if (Array.isArray(addresses) && addresses.length > 0) {
+            const responseAddresses = addresses.map(addr => ({
+                id: addr.id,
+                serviceable: true,
+                cod: true,
+                cod_fee: 0,
+                shipping_fee: 0
+            }));
+
+            const response = { addresses: responseAddresses };
+            console.log('Shipping Response:', JSON.stringify(response, null, 2));
+            return res.status(200).json(response);
+        }
+
+        // Fallback: flat format for older Razorpay API versions
+        const fallbackResponse = {
             serviceable: true,
             cod: true,
             cod_fee: 0,
-            shipping_fee: 0,
-            shipping_methods: [
-                {
-                    id: 'standard_delivery',
-                    name: 'Standard Delivery',
-                    description: 'Delivery within 3-5 business days',
-                    price: 0,
-                    is_cod: true
-                }
-            ]
-        });
+            shipping_fee: 0
+        };
+        console.log('Shipping Response (flat fallback):', JSON.stringify(fallbackResponse, null, 2));
+        return res.status(200).json(fallbackResponse);
+
     } catch (error) {
-        console.error('[Magic Checkout] Shipping Info error:', error);
+        console.error('Shipping Error:', error);
+        // Always return 200 — never let this endpoint fail with 5xx
         return res.status(200).json({
             serviceable: true,
             cod: true,
             cod_fee: 0,
-            shipping_fee: 0,
-            shipping_methods: [
-                {
-                    id: 'standard_delivery',
-                    name: 'Standard Delivery',
-                    description: 'Delivery within 3-5 business days',
-                    price: 0,
-                    is_cod: true
-                }
-            ]
+            shipping_fee: 0
         });
     }
 };

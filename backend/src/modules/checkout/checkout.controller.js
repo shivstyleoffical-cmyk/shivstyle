@@ -21,6 +21,28 @@ const razorpay = new Razorpay({
 });
 
 /**
+ * Helper to log requests and responses to production database for auditing
+ */
+const logToDb = async (endpoint, method, headers, body, response) => {
+    try {
+        await Order.sequelize.query(
+            `INSERT INTO request_logs (endpoint, method, headers, body, response) VALUES (:endpoint, :method, :headers, :body, :response)`,
+            {
+                replacements: {
+                    endpoint,
+                    method,
+                    headers: typeof headers === 'object' ? JSON.stringify(headers) : String(headers),
+                    body: typeof body === 'object' ? JSON.stringify(body) : String(body),
+                    response: typeof response === 'object' ? JSON.stringify(response) : String(response)
+                }
+            }
+        );
+    } catch (err) {
+        console.error(`[DB Log Error] Failed to write log for ${endpoint}:`, err);
+    }
+};
+
+/**
  * Helper to book Shiprocket shipment for an order
  */
 const bookShipment = async (orderId) => {
@@ -635,6 +657,7 @@ export const handleWebhook = async (req, res, next) => {
  * }
  */
 export const getMagicShippingInfo = async (req, res, next) => {
+    let responseData = null;
     try {
         // Log full request body for debugging
         console.log('Razorpay Shipping Request:', JSON.stringify(req.body, null, 2));
@@ -663,30 +686,34 @@ export const getMagicShippingInfo = async (req, res, next) => {
                 shipping_fee: shippingFeeInPaise
             }));
 
-            const response = { addresses: responseAddresses };
-            console.log('Shipping Response:', JSON.stringify(response, null, 2));
-            return res.status(200).json(response);
+            responseData = { addresses: responseAddresses };
+            console.log('Shipping Response:', JSON.stringify(responseData, null, 2));
+            await logToDb('/api/checkout/shipping-info', req.method, req.headers, req.body, responseData);
+            return res.status(200).json(responseData);
         }
 
         // Fallback: flat format for older Razorpay API versions
-        const fallbackResponse = {
+        responseData = {
             serviceable: true,
             cod: true,
             cod_fee: 0,
             shipping_fee: shippingFeeInPaise
         };
-        console.log('Shipping Response (flat fallback):', JSON.stringify(fallbackResponse, null, 2));
-        return res.status(200).json(fallbackResponse);
+        console.log('Shipping Response (flat fallback):', JSON.stringify(responseData, null, 2));
+        await logToDb('/api/checkout/shipping-info', req.method, req.headers, req.body, responseData);
+        return res.status(200).json(responseData);
 
     } catch (error) {
         console.error('Shipping Error:', error);
-        // Always return 200 — never let this endpoint fail with 5xx
-        return res.status(200).json({
+        responseData = {
             serviceable: true,
             cod: true,
             cod_fee: 0,
             shipping_fee: 5000
-        });
+        };
+        await logToDb('/api/checkout/shipping-info', req.method, req.headers, req.body, responseData);
+        // Always return 200 — never let this endpoint fail with 5xx
+        return res.status(200).json(responseData);
     }
 };
 
@@ -695,6 +722,7 @@ export const getMagicShippingInfo = async (req, res, next) => {
  * Called by Razorpay to list all active coupons to the user.
  */
 export const getMagicPromotions = async (req, res, next) => {
+    let responseData = null;
     try {
         const activeOffers = await Offer.findAll({
             where: { status: 'active' }
@@ -712,17 +740,22 @@ export const getMagicPromotions = async (req, res, next) => {
             };
         });
 
-        return res.status(200).json({
+        responseData = {
             success: true,
             promotions
-        });
+        };
+        await logToDb('/api/checkout/promotions', req.method, req.headers, req.body, responseData);
+        return res.status(200).json(responseData);
     } catch (error) {
         console.error('[Magic Checkout] Get Promotions error:', error);
-        return res.status(200).json({ success: true, promotions: [] });
+        responseData = { success: true, promotions: [] };
+        await logToDb('/api/checkout/promotions', req.method, req.headers, req.body, responseData);
+        return res.status(200).json(responseData);
     }
 };
 
 export const applyMagicPromotion = async (req, res, next) => {
+    let responseData = null;
     try {
         console.log('[Magic Checkout] Apply Promotion request body:', JSON.stringify(req.body, null, 2));
 
@@ -744,7 +777,9 @@ export const applyMagicPromotion = async (req, res, next) => {
         console.log(`[Magic Checkout] Extracted coupon: "${code}" for Razorpay Order: "${order_id}"`);
 
         if (!order_id) {
-            return res.status(200).json({ success: false, message: 'Order ID is required' });
+            responseData = { success: false, discount_amount: 0, amount: 0, message: 'Order ID is required' };
+            await logToDb('/api/checkout/apply-promotion', req.method, req.headers, req.body, responseData);
+            return res.status(200).json(responseData);
         }
 
         const order = await Order.findOne({
@@ -753,11 +788,15 @@ export const applyMagicPromotion = async (req, res, next) => {
 
         if (!order) {
             console.warn(`[Magic Checkout] Order not found for Razorpay Order ID: ${order_id}`);
-            return res.status(200).json({ success: false, message: 'Order not found' });
+            responseData = { success: false, discount_amount: 0, amount: 0, message: 'Order not found' };
+            await logToDb('/api/checkout/apply-promotion', req.method, req.headers, req.body, responseData);
+            return res.status(200).json(responseData);
         }
 
         if (!code) {
-            return res.status(200).json({ success: false, message: 'Coupon code is required' });
+            responseData = { success: false, discount_amount: 0, amount: 0, message: 'Coupon code is required' };
+            await logToDb('/api/checkout/apply-promotion', req.method, req.headers, req.body, responseData);
+            return res.status(200).json(responseData);
         }
 
         try {
@@ -767,8 +806,11 @@ export const applyMagicPromotion = async (req, res, next) => {
 
             console.log(`[Magic Checkout] Coupon ${code} validated successfully. Discount: ₹${validation.discount_amount}`);
 
-            return res.status(200).json({
+            responseData = {
                 success: true,
+                discount_amount: discountInPaise,
+                amount: discountInPaise,
+                message: `${validation.code} applied successfully`,
                 promotion: {
                     reference_id: validation.code,
                     code: validation.code,
@@ -777,16 +819,24 @@ export const applyMagicPromotion = async (req, res, next) => {
                     value_type: 'fixed_amount',
                     description: `${validation.code} applied successfully`
                 }
-            });
+            };
+            await logToDb('/api/checkout/apply-promotion', req.method, req.headers, req.body, responseData);
+            return res.status(200).json(responseData);
         } catch (validationErr) {
             console.warn(`[Magic Checkout] Coupon validation failed for ${code}:`, validationErr.message);
-            return res.status(200).json({
+            responseData = {
                 success: false,
+                discount_amount: 0,
+                amount: 0,
                 message: validationErr.message || 'Invalid coupon code'
-            });
+            };
+            await logToDb('/api/checkout/apply-promotion', req.method, req.headers, req.body, responseData);
+            return res.status(200).json(responseData);
         }
     } catch (error) {
         console.error('[Magic Checkout] Apply Promotion error:', error);
-        return res.status(200).json({ success: false, message: 'Internal server error processing coupon' });
+        responseData = { success: false, discount_amount: 0, amount: 0, message: 'Internal server error processing coupon' };
+        await logToDb('/api/checkout/apply-promotion', req.method, req.headers, req.body, responseData);
+        return res.status(200).json(responseData);
     }
 };

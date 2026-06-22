@@ -454,6 +454,7 @@ export const verifyPayment = async (req, res, next) => {
             // Fetch final order/customer information collected by 3rd-party checkout
             let shippingAddress = null;
             let customerDetails = { name: 'Guest Customer', email: null, phone: null };
+            let rzpPaymentDetails = null;
 
             try {
                 // Query Razorpay ORDER endpoint — Magic Checkout stores address in customer_details
@@ -475,7 +476,7 @@ export const verifyPayment = async (req, res, next) => {
                 }
 
                 // Also query the PAYMENT endpoint for any remaining fields
-                const rzpPaymentDetails = await razorpay.payments.fetch(razorpayPaymentId);
+                rzpPaymentDetails = await razorpay.payments.fetch(razorpayPaymentId);
                 if (rzpPaymentDetails) {
                     // Only override if not already set by order customer_details
                     if (!customerDetails.email && rzpPaymentDetails.email) {
@@ -531,6 +532,16 @@ export const verifyPayment = async (req, res, next) => {
                     shippingRecord.phone = customerDetails.phone || shippingRecord.phone;
                 }
                 await shippingRecord.save();
+            }
+
+            // If actual amount paid is different (due to promo coupon applied in Magic Checkout modal), update order totals
+            if (rzpPaymentDetails && rzpPaymentDetails.amount) {
+                const actualPaidAmount = parseFloat(rzpPaymentDetails.amount) / 100;
+                if (actualPaidAmount > 0 && actualPaidAmount !== parseFloat(order.net_amount)) {
+                    order.net_amount = actualPaidAmount;
+                    order.discount_amount = Math.max(0, parseFloat(order.total_amount) + parseFloat(order.shipping_amount) - actualPaidAmount);
+                    order.gross_amount = parseFloat(order.total_amount) - order.discount_amount;
+                }
             }
 
             order.payment_type = 'upi';

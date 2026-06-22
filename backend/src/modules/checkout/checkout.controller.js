@@ -622,17 +622,19 @@ export const getMagicShippingInfo = async (req, res, next) => {
             }
         }
 
-        // Return the expected shipping methods format
+        // Return the expected Razorpay Magic Checkout shipping format
         return res.status(200).json({
-            success: true,
+            serviceable: true,
+            cod: true,
+            cod_fee: 0,
+            shipping_fee: shippingFee,
             shipping_methods: [
                 {
                     id: 'standard_delivery',
                     name: 'Standard Delivery',
                     description: 'Delivery within 3-5 business days',
-                    shipping_fee: shippingFee,
-                    cod_serviceable: true,
-                    cod_fee: 0
+                    price: shippingFee,
+                    is_cod: true
                 }
             ]
         });
@@ -640,14 +642,17 @@ export const getMagicShippingInfo = async (req, res, next) => {
         console.error('[Magic Checkout] Shipping Info error:', error);
         // Fallback response to avoid blocking checkout
         return res.status(200).json({
-            success: true,
+            serviceable: true,
+            cod: true,
+            cod_fee: 0,
+            shipping_fee: 0,
             shipping_methods: [
                 {
                     id: 'standard_delivery',
                     name: 'Standard Delivery',
-                    shipping_fee: 0,
-                    cod_serviceable: true,
-                    cod_fee: 0
+                    description: 'Delivery within 3-5 business days',
+                    price: 0,
+                    is_cod: true
                 }
             ]
         });

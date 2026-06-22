@@ -1,3 +1,3 @@
-https://api.shivstyles.in/api/checkout/shipping-info
-https://api.shivstyles.in/api/checkout/promotions
-https://api.shivstyles.in/api/checkout/apply-promotion
+https://shivstyles.in/api/checkout/shipping-info
+https://shivstyles.in/api/checkout/promotions
+https://shivstyles.in/api/checkout/apply-promotion

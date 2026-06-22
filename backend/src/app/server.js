@@ -37,6 +37,9 @@ console.log(config.env)
 // *** Add this line to serve images ***
 app.use('/images', express.static(path.join(__dirname, '../public/images')));
 
+// Health check — ping this every 10 min to keep Render awake (free tier)
+app.get('/health', (req, res) => res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() }));
+
 // routes
 app.use('/api/users', userRoutes);
 app.use('/api/categories', categoryRoutes);

@@ -606,41 +606,27 @@ export const handleWebhook = async (req, res, next) => {
 export const getMagicShippingInfo = async (req, res, next) => {
     try {
         const { order_id, address } = req.body;
-        console.log(`[Magic Checkout] Shipping Info requested for Razorpay Order ID: ${order_id}`, address);
+        console.log(`[Magic Checkout] Shipping Info requested for Order: ${order_id}`, address?.zipcode);
 
-        // Find the local pending order using the Razorpay order ID
-        const order = await Order.findOne({
-            where: { payment_transaction_id: order_id }
-        });
-
-        let shippingFee = 9900; // Default shipping fee: ₹99 (9900 paise)
-        if (order) {
-            const netAmount = parseFloat(order.net_amount || 0);
-            // Free shipping on orders over ₹999
-            if (netAmount >= 999) {
-                shippingFee = 0;
-            }
-        }
-
-        // Return the expected Razorpay Magic Checkout shipping format
+        // Return instantly without DB query — Razorpay has strict timeout on this endpoint
+        // Free shipping for all orders (simplest reliable response)
         return res.status(200).json({
             serviceable: true,
             cod: true,
             cod_fee: 0,
-            shipping_fee: shippingFee,
+            shipping_fee: 0,
             shipping_methods: [
                 {
                     id: 'standard_delivery',
                     name: 'Standard Delivery',
                     description: 'Delivery within 3-5 business days',
-                    price: shippingFee,
+                    price: 0,
                     is_cod: true
                 }
             ]
         });
     } catch (error) {
         console.error('[Magic Checkout] Shipping Info error:', error);
-        // Fallback response to avoid blocking checkout
         return res.status(200).json({
             serviceable: true,
             cod: true,

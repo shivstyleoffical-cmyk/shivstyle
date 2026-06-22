@@ -11,6 +11,8 @@ import OrderService from '../order/order.service.js';
 import ProductVariant from '../product/product-variant.model.js';
 import Product from '../product/product.model.js';
 import shiprocketService from '../../integrations/delivery/shiprocket.service.js';
+import Offer from '../offer/offer.model.js';
+import OfferService from '../offer/offer.service.js';
 
 // Initialize Razorpay
 const razorpay = new Razorpay({
@@ -694,15 +696,25 @@ export const getMagicShippingInfo = async (req, res, next) => {
  */
 export const getMagicPromotions = async (req, res, next) => {
     try {
+        const activeOffers = await Offer.findAll({
+            where: { status: 'active' }
+        });
+
+        const promotions = activeOffers.map(offer => {
+            const displayValue = offer.discount_type === 'percentage' 
+                ? `${parseFloat(offer.discount_value)}%` 
+                : `₹${parseFloat(offer.discount_value)}`;
+            
+            return {
+                id: offer.code,
+                summary: `${displayValue} Off`,
+                description: offer.description || `Get ${displayValue} discount on your order using code ${offer.code}.`
+            };
+        });
+
         return res.status(200).json({
             success: true,
-            promotions: [
-                {
-                    id: 'FIRST10',
-                    summary: '10% off on your first order',
-                    description: 'Use code FIRST10 to get 10% discount on cart value'
-                }
-            ]
+            promotions
         });
     } catch (error) {
         console.error('[Magic Checkout] Get Promotions error:', error);
@@ -727,28 +739,29 @@ export const applyMagicPromotion = async (req, res, next) => {
             return res.status(404).json({ success: false, message: 'Order not found' });
         }
 
-        if (code && code.toUpperCase() === 'FIRST10') {
-            const netAmount = parseFloat(order.net_amount || 0);
-            const discountAmount = Math.round(netAmount * 0.10); // 10% discount
-            const discountInPaise = discountAmount * 100;
+        try {
+            // Validate against the database using OfferService
+            const validation = await OfferService.validateCoupon(code, parseFloat(order.total_amount));
+            const discountInPaise = Math.round(validation.discount_amount * 100);
 
             return res.status(200).json({
                 success: true,
                 promotion: {
-                    reference_id: 'FIRST10',
-                    code: 'FIRST10',
+                    reference_id: validation.code,
+                    code: validation.code,
                     type: 'coupon',
                     value: discountInPaise,
                     value_type: 'fixed_amount',
-                    description: '10% discount applied successfully'
+                    description: `${validation.code} applied successfully`
                 }
             });
+        } catch (validationErr) {
+            console.warn(`[Magic Checkout] Coupon validation failed for ${code}:`, validationErr.message);
+            return res.status(400).json({
+                success: false,
+                message: validationErr.message || 'Invalid coupon code'
+            });
         }
-
-        return res.status(400).json({
-            success: false,
-            message: 'Invalid coupon code'
-        });
     } catch (error) {
         console.error('[Magic Checkout] Apply Promotion error:', error);
         return res.status(500).json({ success: false, message: 'Internal server error' });

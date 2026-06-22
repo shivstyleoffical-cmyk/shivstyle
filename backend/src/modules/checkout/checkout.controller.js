@@ -722,27 +722,50 @@ export const getMagicPromotions = async (req, res, next) => {
     }
 };
 
-/**
- * Razorpay Magic Checkout Apply Promotion API
- * Validates the entered coupon code and returns the discount amount.
- */
 export const applyMagicPromotion = async (req, res, next) => {
     try {
-        const { order_id, code } = req.body;
-        console.log(`[Magic Checkout] Applying coupon: ${code} to Razorpay Order: ${order_id}`);
+        console.log('[Magic Checkout] Apply Promotion request body:', JSON.stringify(req.body, null, 2));
+
+        const { order_id } = req.body;
+        
+        // Extract coupon code from various possible locations in request body
+        let code = req.body.code || req.body.coupon_code;
+        if (!code && req.body.coupon) {
+            code = typeof req.body.coupon === 'object' ? req.body.coupon.code : req.body.coupon;
+        }
+        if (!code && req.body.promotion) {
+            code = typeof req.body.promotion === 'object' ? (req.body.promotion.code || req.body.promotion.reference_id) : req.body.promotion;
+        }
+
+        if (code && typeof code === 'string') {
+            code = code.trim().toUpperCase();
+        }
+
+        console.log(`[Magic Checkout] Extracted coupon: "${code}" for Razorpay Order: "${order_id}"`);
+
+        if (!order_id) {
+            return res.status(200).json({ success: false, message: 'Order ID is required' });
+        }
 
         const order = await Order.findOne({
             where: { payment_transaction_id: order_id }
         });
 
         if (!order) {
-            return res.status(404).json({ success: false, message: 'Order not found' });
+            console.warn(`[Magic Checkout] Order not found for Razorpay Order ID: ${order_id}`);
+            return res.status(200).json({ success: false, message: 'Order not found' });
+        }
+
+        if (!code) {
+            return res.status(200).json({ success: false, message: 'Coupon code is required' });
         }
 
         try {
             // Validate against the database using OfferService
             const validation = await OfferService.validateCoupon(code, parseFloat(order.total_amount));
             const discountInPaise = Math.round(validation.discount_amount * 100);
+
+            console.log(`[Magic Checkout] Coupon ${code} validated successfully. Discount: ₹${validation.discount_amount}`);
 
             return res.status(200).json({
                 success: true,
@@ -757,13 +780,13 @@ export const applyMagicPromotion = async (req, res, next) => {
             });
         } catch (validationErr) {
             console.warn(`[Magic Checkout] Coupon validation failed for ${code}:`, validationErr.message);
-            return res.status(400).json({
+            return res.status(200).json({
                 success: false,
                 message: validationErr.message || 'Invalid coupon code'
             });
         }
     } catch (error) {
         console.error('[Magic Checkout] Apply Promotion error:', error);
-        return res.status(500).json({ success: false, message: 'Internal server error' });
+        return res.status(200).json({ success: false, message: 'Internal server error processing coupon' });
     }
 };

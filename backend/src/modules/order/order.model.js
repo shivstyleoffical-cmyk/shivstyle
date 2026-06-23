@@ -91,6 +91,17 @@ const Order = sequelize.define('order', {
         allowNull: true,
         field: 'updated_at'
     },
+    coupon_code: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        field: 'coupon_code'
+    },
+    coupon_used_incremented: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+        field: 'coupon_used_incremented'
+    },
     final_amount: {
         type: DataTypes.VIRTUAL,
         get() { return this.net_amount; }

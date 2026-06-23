@@ -806,6 +806,10 @@ export const applyMagicPromotion = async (req, res, next) => {
             console.log(`[Magic Checkout] Coupon ${code} validated successfully. Discount: ₹${validation.discount_amount}`);
 
             responseData = {
+                success: true,
+                discount_amount: discountInPaise,
+                amount: discountInPaise,
+                message: `${validation.code} applied successfully`,
                 promotion: {
                     reference_id: validation.code,
                     code: validation.code,
@@ -815,6 +819,7 @@ export const applyMagicPromotion = async (req, res, next) => {
                     description: `${validation.code} applied successfully`
                 }
             };
+            res.setHeader('Content-Type', 'application/json');
             await logToDb('/api/checkout/apply-promotion', req.method, req.headers, req.body, responseData);
             return res.status(200).json(responseData);
         } catch (validationErr) {

@@ -792,11 +792,11 @@ export const applyMagicPromotion = async (req, res, next) => {
         let code = body.code || query.code || body.coupon_code || query.coupon_code;
         if (!code && (body.coupon || query.coupon)) {
             const couponSource = body.coupon || query.coupon;
-            code = typeof couponSource === 'object' ? couponSource.code : couponSource;
+            code = (couponSource && typeof couponSource === 'object') ? couponSource.code : couponSource;
         }
         if (!code && (body.promotion || query.promotion)) {
             const promoSource = body.promotion || query.promotion;
-            code = typeof promoSource === 'object' ? (promoSource.code || promoSource.reference_id) : promoSource;
+            code = (promoSource && typeof promoSource === 'object') ? (promoSource.code || promoSource.reference_id) : promoSource;
         }
 
         if (code && typeof code === 'string') {

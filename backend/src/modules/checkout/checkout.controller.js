@@ -659,19 +659,31 @@ export const handleWebhook = async (req, res, next) => {
 export const getMagicShippingInfo = async (req, res, next) => {
     let responseData = null;
     try {
-        // Log full request body for debugging
-        console.log('Razorpay Shipping Request:', JSON.stringify(req.body, null, 2));
+        console.log("SHIPPING INFO REQUEST HEADERS:", req.headers);
+        console.log("SHIPPING INFO REQUEST BODY:", req.body);
 
-        const { order_id, addresses, customer } = req.body;
+        const { order_id, razorpay_order_id, addresses, customer } = req.body;
+
+        const lookupIds = [];
+        if (razorpay_order_id) lookupIds.push(razorpay_order_id);
+        if (order_id) lookupIds.push(order_id);
 
         // Fetch shipping fee from order in database (which includes the shipping fee calculated during order creation)
         let shippingFeeInPaise = 5000; // default to ₹50 (5000 paise)
-        if (order_id) {
+        if (lookupIds.length > 0) {
             const order = await Order.findOne({
-                where: { payment_transaction_id: order_id }
+                where: {
+                    [Op.or]: [
+                        { payment_transaction_id: { [Op.in]: lookupIds } },
+                        { order_number: { [Op.in]: lookupIds } }
+                    ]
+                }
             });
             if (order) {
                 shippingFeeInPaise = Math.round(parseFloat(order.shipping_amount || 0) * 100);
+                console.log(`[Magic Checkout] Found order for shipping lookups. Shipping fee: ₹${order.shipping_amount} (${shippingFeeInPaise} paise)`);
+            } else {
+                console.warn(`[Magic Checkout] Order not found for shipping lookup with IDs: ${lookupIds.join(', ')}`);
             }
         }
 
@@ -687,7 +699,8 @@ export const getMagicShippingInfo = async (req, res, next) => {
             }));
 
             responseData = { addresses: responseAddresses };
-            console.log('Shipping Response:', JSON.stringify(responseData, null, 2));
+            console.log("SHIPPING INFO RESPONSE BODY:", responseData);
+            res.setHeader('Content-Type', 'application/json');
             await logToDb('/api/checkout/shipping-info', req.method, req.headers, req.body, responseData);
             return res.status(200).json(responseData);
         }
@@ -699,7 +712,8 @@ export const getMagicShippingInfo = async (req, res, next) => {
             cod_fee: 0,
             shipping_fee: shippingFeeInPaise
         };
-        console.log('Shipping Response (flat fallback):', JSON.stringify(responseData, null, 2));
+        console.log("SHIPPING INFO RESPONSE BODY (flat fallback):", responseData);
+        res.setHeader('Content-Type', 'application/json');
         await logToDb('/api/checkout/shipping-info', req.method, req.headers, req.body, responseData);
         return res.status(200).json(responseData);
 
@@ -711,6 +725,8 @@ export const getMagicShippingInfo = async (req, res, next) => {
             cod_fee: 0,
             shipping_fee: 5000
         };
+        console.log("SHIPPING INFO RESPONSE BODY (error fallback):", responseData);
+        res.setHeader('Content-Type', 'application/json');
         await logToDb('/api/checkout/shipping-info', req.method, req.headers, req.body, responseData);
         // Always return 200 — never let this endpoint fail with 5xx
         return res.status(200).json(responseData);
@@ -735,6 +751,7 @@ export const getMagicPromotions = async (req, res, next) => {
             
             return {
                 id: offer.code,
+                code: offer.code,
                 summary: `${displayValue} Off`,
                 description: offer.description || `Get ${displayValue} discount on your order using code ${offer.code}.`
             };
@@ -743,6 +760,10 @@ export const getMagicPromotions = async (req, res, next) => {
         responseData = {
             promotions
         };
+        console.log("GET PROMOTIONS REQUEST HEADERS:", req.headers);
+        console.log("GET PROMOTIONS REQUEST BODY:", req.body);
+        console.log("GET PROMOTIONS RESPONSE BODY:", responseData);
+        res.setHeader('Content-Type', 'application/json');
         await logToDb('/api/checkout/promotions', req.method, req.headers, req.body, responseData);
         return res.status(200).json(responseData);
     } catch (error) {
@@ -756,7 +777,8 @@ export const getMagicPromotions = async (req, res, next) => {
 export const applyMagicPromotion = async (req, res, next) => {
     let responseData = null;
     try {
-        console.log('[Magic Checkout] Apply Promotion request body:', JSON.stringify(req.body, null, 2));
+        console.log("APPLY PROMOTION REQUEST HEADERS:", req.headers);
+        console.log("APPLY PROMOTION REQUEST BODY:", req.body);
 
         const { order_id } = req.body;
         
@@ -773,27 +795,36 @@ export const applyMagicPromotion = async (req, res, next) => {
             code = code.trim().toUpperCase();
         }
 
-        console.log(`[Magic Checkout] Extracted coupon: "${code}" for Razorpay Order: "${order_id}"`);
-
         if (!order_id) {
             responseData = { success: false, discount_amount: 0, amount: 0, message: 'Order ID is required' };
+            console.log("APPLY PROMOTION RESPONSE BODY:", responseData);
+            res.setHeader('Content-Type', 'application/json');
             await logToDb('/api/checkout/apply-promotion', req.method, req.headers, req.body, responseData);
             return res.status(200).json(responseData);
         }
 
         const order = await Order.findOne({
-            where: { payment_transaction_id: order_id }
+            where: {
+                [Op.or]: [
+                    { payment_transaction_id: order_id },
+                    { order_number: order_id }
+                ]
+            }
         });
 
         if (!order) {
-            console.warn(`[Magic Checkout] Order not found for Razorpay Order ID: ${order_id}`);
+            console.warn(`[Magic Checkout] Order not found for Razorpay Order ID / reference: ${order_id}`);
             responseData = { success: false, discount_amount: 0, amount: 0, message: 'Order not found' };
+            console.log("APPLY PROMOTION RESPONSE BODY:", responseData);
+            res.setHeader('Content-Type', 'application/json');
             await logToDb('/api/checkout/apply-promotion', req.method, req.headers, req.body, responseData);
             return res.status(200).json(responseData);
         }
 
         if (!code) {
             responseData = { success: false, discount_amount: 0, amount: 0, message: 'Coupon code is required' };
+            console.log("APPLY PROMOTION RESPONSE BODY:", responseData);
+            res.setHeader('Content-Type', 'application/json');
             await logToDb('/api/checkout/apply-promotion', req.method, req.headers, req.body, responseData);
             return res.status(200).json(responseData);
         }
@@ -819,6 +850,7 @@ export const applyMagicPromotion = async (req, res, next) => {
                     description: `${validation.code} applied successfully`
                 }
             };
+            console.log("APPLY PROMOTION RESPONSE BODY:", responseData);
             res.setHeader('Content-Type', 'application/json');
             await logToDb('/api/checkout/apply-promotion', req.method, req.headers, req.body, responseData);
             return res.status(200).json(responseData);
@@ -830,12 +862,16 @@ export const applyMagicPromotion = async (req, res, next) => {
                 amount: 0,
                 message: validationErr.message || 'Invalid coupon code'
             };
+            console.log("APPLY PROMOTION RESPONSE BODY:", responseData);
+            res.setHeader('Content-Type', 'application/json');
             await logToDb('/api/checkout/apply-promotion', req.method, req.headers, req.body, responseData);
             return res.status(200).json(responseData);
         }
     } catch (error) {
         console.error('[Magic Checkout] Apply Promotion error:', error);
         responseData = { success: false, discount_amount: 0, amount: 0, message: 'Internal server error processing coupon' };
+        console.log("APPLY PROMOTION RESPONSE BODY:", responseData);
+        res.setHeader('Content-Type', 'application/json');
         await logToDb('/api/checkout/apply-promotion', req.method, req.headers, req.body, responseData);
         return res.status(200).json(responseData);
     }

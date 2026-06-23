@@ -817,10 +817,12 @@ export const applyMagicPromotion = async (req, res, next) => {
 
         const body = req.body || {};
         const query = req.query || {};
-        const order_id = body.order_id || query.order_id;
+        
+        // Extract order ID with all possible keys (crucial for Razorpay custom integrations)
+        const order_id = body.order_id || body.razorpay_order_id || body.reference_id || query.order_id || query.razorpay_order_id || query.reference_id;
 
-        // Extract coupon code from various possible locations in request body or query
-        let code = body.code || query.code || body.coupon_code || query.coupon_code;
+        // Extract coupon code with all possible keys
+        let code = body.code || body.coupon_code || body.promotion_code || query.code || query.coupon_code || query.promotion_code;
         if (!code && (body.coupon || query.coupon)) {
             const couponSource = body.coupon || query.coupon;
             code = typeof couponSource === 'object' ? couponSource.code : couponSource;

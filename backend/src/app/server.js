@@ -19,13 +19,33 @@ import Product from '../modules/product/product.model.js';
 import Category from '../modules/category/category.model.js';
 import { errorHandler } from '../middleware/errorHandler.js';
 import '../database/associations.js'; // Import associations
-import { connectDB } from '../database/connection.js';
+import sequelize, { connectDB } from '../database/connection.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const app = express();
 
 // middleware
 app.use(cors());
+
+// Helper to log incoming requests directly to DB for debugging
+const logIncomingRequestToDb = async (req, body) => {
+    try {
+        await sequelize.query(
+            `INSERT INTO request_logs (endpoint, method, headers, body, response) VALUES (:endpoint, :method, :headers, :body, :response)`,
+            {
+                replacements: {
+                    endpoint: req.originalUrl,
+                    method: req.method,
+                    headers: typeof req.headers === 'object' ? JSON.stringify(req.headers) : String(req.headers),
+                    body: typeof body === 'object' ? JSON.stringify(body) : String(body),
+                    response: 'INCOMING_REQUEST'
+                }
+            }
+        );
+    } catch (dbErr) {
+        console.error('[DB Audit Log Error] Failed to write incoming request:', dbErr.message);
+    }
+};
 
 // Custom parser and logger middleware for checkout endpoints
 app.use('/api/checkout', (req, res, next) => {
@@ -48,6 +68,7 @@ app.use('/api/checkout', (req, res, next) => {
         console.log(`URL: ${req.originalUrl}`);
         console.log(`Headers:`, JSON.stringify(req.headers, null, 2));
         console.log(`=================================\n`);
+        logIncomingRequestToDb(req, req.query);
         return next();
     }
 
@@ -100,6 +121,7 @@ app.use('/api/checkout', (req, res, next) => {
             }
         }
         console.log(`=================================\n`);
+        logIncomingRequestToDb(req, req.body);
         next();
     });
 });

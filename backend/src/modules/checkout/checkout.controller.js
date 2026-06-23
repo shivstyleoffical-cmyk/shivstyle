@@ -690,8 +690,8 @@ export const getMagicShippingInfo = async (req, res, next) => {
         // Razorpay sends 'addresses' as an array (not singular 'address')
         // We must return serviceability mapped to each address by its id
         if (Array.isArray(addresses) && addresses.length > 0) {
-            const responseAddresses = addresses.map(addr => ({
-                id: addr.id,
+            const responseAddresses = addresses.map((addr, index) => ({
+                id: addr.id !== undefined && addr.id !== null ? addr.id : index,
                 serviceable: true,
                 cod: true,
                 cod_fee: 0,
@@ -758,6 +758,7 @@ export const getMagicPromotions = async (req, res, next) => {
         });
 
         responseData = {
+            success: true,
             promotions
         };
         console.log("GET PROMOTIONS REQUEST HEADERS:", req.headers);

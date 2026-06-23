@@ -1,5 +1,9 @@
 import { Sequelize, Op } from 'sequelize';
 import config from '../config/config.js';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+
+const execAsync = promisify(exec);
 
 /**
  * Database Configuration
@@ -43,6 +47,16 @@ export const connectDB = async () => {
     try {
         await sequelize.authenticate();
         console.log('✅ Database connection established successfully.');
+
+        // Run migrations programmatically on startup (essential for production auto-deployment)
+        try {
+            console.log('🔄 Running database migrations on startup...');
+            const { stdout, stderr } = await execAsync('npx sequelize-cli db:migrate');
+            if (stdout) console.log('Migration output:\n', stdout);
+            if (stderr) console.warn('Migration warnings:\n', stderr);
+        } catch (migErr) {
+            console.error('❌ Failed to run database migrations on startup:', migErr.message);
+        }
 
         if (config.env === 'development') {
             await sequelize.sync({ force: false });

@@ -37,11 +37,11 @@
     "nodemon": "^3.1.10",
     "razorpay": "^2.9.6",
     "sequelize": "^6.37.7",
+    "sequelize-cli": "^6.6.5",
     "twilio": "^5.7.2",
     "uuid": "^9.0.1",
     "winston": "^3.17.0"
   },
   "devDependencies": {
-    "sequelize-cli": "^6.6.5"
   }
 }

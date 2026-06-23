@@ -784,16 +784,18 @@ export const applyMagicPromotion = async (req, res, next) => {
         console.log("APPLY PROMOTION REQUEST HEADERS:", req.headers);
         console.log("APPLY PROMOTION REQUEST BODY:", req.body);
 
-        const order_id = req.body.order_id || req.query.order_id;
+        const body = req.body || {};
+        const query = req.query || {};
+        const order_id = body.order_id || query.order_id;
         
         // Extract coupon code from various possible locations in request body or query
-        let code = req.body.code || req.query.code || req.body.coupon_code || req.query.coupon_code;
-        if (!code && (req.body.coupon || req.query.coupon)) {
-            const couponSource = req.body.coupon || req.query.coupon;
+        let code = body.code || query.code || body.coupon_code || query.coupon_code;
+        if (!code && (body.coupon || query.coupon)) {
+            const couponSource = body.coupon || query.coupon;
             code = typeof couponSource === 'object' ? couponSource.code : couponSource;
         }
-        if (!code && (req.body.promotion || req.query.promotion)) {
-            const promoSource = req.body.promotion || req.query.promotion;
+        if (!code && (body.promotion || query.promotion)) {
+            const promoSource = body.promotion || query.promotion;
             code = typeof promoSource === 'object' ? (promoSource.code || promoSource.reference_id) : promoSource;
         }
 

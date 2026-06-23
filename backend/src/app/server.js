@@ -29,6 +29,7 @@ app.use(cors());
 
 // Custom parser and logger middleware for checkout endpoints
 app.use('/api/checkout', (req, res, next) => {
+    req.body = req.body || {};
     // Intercept response to log it
     const originalJson = res.json;
     res.json = function (body) {

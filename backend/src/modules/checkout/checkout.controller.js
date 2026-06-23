@@ -662,7 +662,10 @@ export const getMagicShippingInfo = async (req, res, next) => {
         console.log("SHIPPING INFO REQUEST HEADERS:", req.headers);
         console.log("SHIPPING INFO REQUEST BODY:", req.body);
 
-        const { order_id, razorpay_order_id, addresses, customer } = req.body;
+        const order_id = req.body.order_id || req.query.order_id;
+        const razorpay_order_id = req.body.razorpay_order_id || req.query.razorpay_order_id;
+        const addresses = req.body.addresses || req.query.addresses;
+        const customer = req.body.customer || req.query.customer;
 
         const lookupIds = [];
         if (razorpay_order_id) lookupIds.push(razorpay_order_id);
@@ -781,15 +784,17 @@ export const applyMagicPromotion = async (req, res, next) => {
         console.log("APPLY PROMOTION REQUEST HEADERS:", req.headers);
         console.log("APPLY PROMOTION REQUEST BODY:", req.body);
 
-        const { order_id } = req.body;
+        const order_id = req.body.order_id || req.query.order_id;
         
-        // Extract coupon code from various possible locations in request body
-        let code = req.body.code || req.body.coupon_code;
-        if (!code && req.body.coupon) {
-            code = typeof req.body.coupon === 'object' ? req.body.coupon.code : req.body.coupon;
+        // Extract coupon code from various possible locations in request body or query
+        let code = req.body.code || req.query.code || req.body.coupon_code || req.query.coupon_code;
+        if (!code && (req.body.coupon || req.query.coupon)) {
+            const couponSource = req.body.coupon || req.query.coupon;
+            code = typeof couponSource === 'object' ? couponSource.code : couponSource;
         }
-        if (!code && req.body.promotion) {
-            code = typeof req.body.promotion === 'object' ? (req.body.promotion.code || req.body.promotion.reference_id) : req.body.promotion;
+        if (!code && (req.body.promotion || req.query.promotion)) {
+            const promoSource = req.body.promotion || req.query.promotion;
+            code = typeof promoSource === 'object' ? (promoSource.code || promoSource.reference_id) : promoSource;
         }
 
         if (code && typeof code === 'string') {

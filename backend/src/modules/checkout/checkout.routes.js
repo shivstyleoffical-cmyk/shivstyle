@@ -20,9 +20,16 @@ router.post('/webhook', checkoutController.handleWebhook);
 
 // Magic Checkout specific endpoints called by Razorpay servers
 router.post('/shipping-info', checkoutController.getMagicShippingInfo);
+router.get('/shipping-info', checkoutController.getMagicShippingInfo);
 router.post('/shipping_info', checkoutController.getMagicShippingInfo);
+router.get('/shipping_info', checkoutController.getMagicShippingInfo);
+
 router.post('/promotions', checkoutController.getMagicPromotions);
+router.get('/promotions', checkoutController.getMagicPromotions);
+
 router.post('/apply-promotion', checkoutController.applyMagicPromotion);
+router.get('/apply-promotion', checkoutController.applyMagicPromotion);
 router.post('/apply_promotion', checkoutController.applyMagicPromotion);
+router.get('/apply_promotion', checkoutController.applyMagicPromotion);
 
 export default router;

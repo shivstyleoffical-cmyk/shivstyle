@@ -26,8 +26,97 @@ const app = express();
 
 // middleware
 app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+
+// Custom parser and logger middleware for checkout endpoints
+app.use('/api/checkout', (req, res, next) => {
+    // Intercept response to log it
+    const originalJson = res.json;
+    res.json = function (body) {
+        console.log(`\n=== [CHECKOUT RESPONSE AUDIT] ===`);
+        console.log(`Status: ${res.statusCode}`);
+        console.log(`Headers:`, JSON.stringify(res.getHeaders(), null, 2));
+        console.log(`Response Body:`, JSON.stringify(body, null, 2));
+        console.log(`==================================\n`);
+        return originalJson.call(this, body);
+    };
+
+    if (req.method === 'GET' || req.method === 'DELETE') {
+        console.log(`\n=== [CHECKOUT REQUEST AUDIT] ===`);
+        console.log(`Timestamp: ${new Date().toISOString()}`);
+        console.log(`Method: ${req.method}`);
+        console.log(`URL: ${req.originalUrl}`);
+        console.log(`Headers:`, JSON.stringify(req.headers, null, 2));
+        console.log(`=================================\n`);
+        return next();
+    }
+
+    let data = '';
+    req.setEncoding('utf8');
+    req.on('data', chunk => {
+        data += chunk;
+    });
+    req.on('end', () => {
+        req.rawBody = data;
+        
+        console.log(`\n=== [CHECKOUT REQUEST AUDIT] ===`);
+        console.log(`Timestamp: ${new Date().toISOString()}`);
+        console.log(`Method: ${req.method}`);
+        console.log(`URL: ${req.originalUrl}`);
+        console.log(`Headers:`, JSON.stringify(req.headers, null, 2));
+        console.log(`Raw Body:`, data);
+        
+        req.body = {};
+        if (data) {
+            const contentType = req.headers['content-type'] || '';
+            if (contentType.includes('application/json') || data.trim().startsWith('{') || data.trim().startsWith('[')) {
+                try {
+                    req.body = JSON.parse(data);
+                    console.log(`Parsed Body (JSON):`, JSON.stringify(req.body, null, 2));
+                } catch (jsonErr) {
+                    console.error(`[CHECKOUT AUDIT] JSON Parse Error:`, jsonErr.message);
+                    try {
+                        const parsed = {};
+                        new URLSearchParams(data).forEach((value, key) => {
+                            parsed[key] = value;
+                        });
+                        req.body = parsed;
+                        console.log(`Parsed Body (URLSearchParams Fallback):`, JSON.stringify(req.body, null, 2));
+                    } catch (e) {
+                        console.error(`[CHECKOUT AUDIT] URLSearchParams Parse Error:`, e.message);
+                    }
+                }
+            } else {
+                try {
+                    const parsed = {};
+                    new URLSearchParams(data).forEach((value, key) => {
+                        parsed[key] = value;
+                    });
+                    req.body = parsed;
+                    console.log(`Parsed Body (URLSearchParams):`, JSON.stringify(req.body, null, 2));
+                } catch (urlErr) {
+                    console.error(`[CHECKOUT AUDIT] URLSearchParams Parse Error:`, urlErr.message);
+                }
+            }
+        }
+        console.log(`=================================\n`);
+        next();
+    });
+});
+
+// Conditional body parsers (bypassing /api/checkout)
+app.use((req, res, next) => {
+    if (req.originalUrl.startsWith('/api/checkout')) {
+        return next();
+    }
+    express.json()(req, res, next);
+});
+
+app.use((req, res, next) => {
+    if (req.originalUrl.startsWith('/api/checkout')) {
+        return next();
+    }
+    express.urlencoded({ extended: true })(req, res, next);
+});
 
 
 const PORT = config.port || 6006;

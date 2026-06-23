@@ -1,6 +1,14 @@
 import logger from "../config/logger.js";
 
 export const errorHandler = (err, req, res, next) => {
+  console.error(`\n=== [EXPRESS GLOBAL ERROR HANDLER] ===`);
+  console.error(`Error: ${err.name} - ${err.message}`);
+  console.error(`Request: ${req.method} ${req.originalUrl}`);
+  console.error(`Headers:`, JSON.stringify(req.headers, null, 2));
+  console.error(`Body:`, JSON.stringify(req.body, null, 2));
+  console.error(`Stack trace:\n`, err.stack);
+  console.error(`======================================\n`);
+
   logger.error(err.stack);
 
   let statusCode = err.statusCode || 500;

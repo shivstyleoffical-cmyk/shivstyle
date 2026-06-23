@@ -802,11 +802,19 @@ export const applyMagicPromotion = async (req, res, next) => {
         }
 
         if (!order_id) {
-            responseData = { success: false, discount_amount: 0, amount: 0, message: 'Order ID is required' };
+            responseData = {
+                error: {
+                    code: 'BAD_REQUEST_ERROR',
+                    description: 'Order ID is required',
+                    source: 'business',
+                    step: 'apply_promotion',
+                    reason: 'missing_order_id'
+                }
+            };
             console.log("APPLY PROMOTION RESPONSE BODY:", responseData);
             res.setHeader('Content-Type', 'application/json');
             await logToDb('/api/checkout/apply-promotion', req.method, req.headers, req.body, responseData);
-            return res.status(200).json(responseData);
+            return res.status(400).json(responseData);
         }
 
         const order = await Order.findOne({
@@ -820,19 +828,35 @@ export const applyMagicPromotion = async (req, res, next) => {
 
         if (!order) {
             console.warn(`[Magic Checkout] Order not found for Razorpay Order ID / reference: ${order_id}`);
-            responseData = { success: false, discount_amount: 0, amount: 0, message: 'Order not found' };
+            responseData = {
+                error: {
+                    code: 'BAD_REQUEST_ERROR',
+                    description: 'Order not found',
+                    source: 'business',
+                    step: 'apply_promotion',
+                    reason: 'order_not_found'
+                }
+            };
             console.log("APPLY PROMOTION RESPONSE BODY:", responseData);
             res.setHeader('Content-Type', 'application/json');
             await logToDb('/api/checkout/apply-promotion', req.method, req.headers, req.body, responseData);
-            return res.status(200).json(responseData);
+            return res.status(400).json(responseData);
         }
 
         if (!code) {
-            responseData = { success: false, discount_amount: 0, amount: 0, message: 'Coupon code is required' };
+            responseData = {
+                error: {
+                    code: 'BAD_REQUEST_ERROR',
+                    description: 'Coupon code is required',
+                    source: 'business',
+                    step: 'apply_promotion',
+                    reason: 'missing_coupon_code'
+                }
+            };
             console.log("APPLY PROMOTION RESPONSE BODY:", responseData);
             res.setHeader('Content-Type', 'application/json');
             await logToDb('/api/checkout/apply-promotion', req.method, req.headers, req.body, responseData);
-            return res.status(200).json(responseData);
+            return res.status(400).json(responseData);
         }
 
         try {
@@ -843,14 +867,10 @@ export const applyMagicPromotion = async (req, res, next) => {
             console.log(`[Magic Checkout] Coupon ${code} validated successfully. Discount: ₹${validation.discount_amount}`);
 
             responseData = {
-                success: true,
-                discount_amount: discountInPaise,
-                amount: discountInPaise,
-                message: `${validation.code} applied successfully`,
                 promotion: {
                     reference_id: validation.code,
+                    type: 'offer',
                     code: validation.code,
-                    type: 'coupon',
                     value: discountInPaise,
                     value_type: 'fixed_amount',
                     description: `${validation.code} applied successfully`
@@ -863,22 +883,33 @@ export const applyMagicPromotion = async (req, res, next) => {
         } catch (validationErr) {
             console.warn(`[Magic Checkout] Coupon validation failed for ${code}:`, validationErr.message);
             responseData = {
-                success: false,
-                discount_amount: 0,
-                amount: 0,
-                message: validationErr.message || 'Invalid coupon code'
+                error: {
+                    code: 'BAD_REQUEST_ERROR',
+                    description: validationErr.message || 'Invalid coupon code',
+                    source: 'business',
+                    step: 'apply_promotion',
+                    reason: 'invalid_coupon'
+                }
             };
             console.log("APPLY PROMOTION RESPONSE BODY:", responseData);
             res.setHeader('Content-Type', 'application/json');
             await logToDb('/api/checkout/apply-promotion', req.method, req.headers, req.body, responseData);
-            return res.status(200).json(responseData);
+            return res.status(400).json(responseData);
         }
     } catch (error) {
         console.error('[Magic Checkout] Apply Promotion error:', error);
-        responseData = { success: false, discount_amount: 0, amount: 0, message: 'Internal server error processing coupon' };
+        responseData = {
+            error: {
+                code: 'SERVER_ERROR',
+                description: 'Internal server error processing coupon',
+                source: 'business',
+                step: 'apply_promotion',
+                reason: 'internal_server_error'
+            }
+        };
         console.log("APPLY PROMOTION RESPONSE BODY:", responseData);
         res.setHeader('Content-Type', 'application/json');
         await logToDb('/api/checkout/apply-promotion', req.method, req.headers, req.body, responseData);
-        return res.status(200).json(responseData);
+        return res.status(500).json(responseData);
     }
 };

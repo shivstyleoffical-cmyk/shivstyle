@@ -1,6 +1,16 @@
 import { validationResult } from 'express-validator';
 import orderService from './order.service.js';
 
+export const trackOrder = async (req, res, next) => {
+    try {
+        const { order_number, identifier } = req.body;
+        const order = await orderService.lookupOrder(order_number, identifier);
+        return res.status(200).json({ success: true, order });
+    } catch (error) {
+        next(error);
+    }
+};
+
 export const createOrder = async (req, res, next) => {
     try {
         const error = validationResult(req);
@@ -40,6 +50,18 @@ export const getUserOrders = async (req, res, next) => {
 export const getOrderById = async (req, res, next) => {
     try {
         const order = await orderService.getOrderById(req.user.userId, req.params.id);
+        return res.status(200).json({
+            success: true,
+            order
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+export const getOrderByIdAdmin = async (req, res, next) => {
+    try {
+        const order = await orderService.getOrderByIdAdmin(req.params.id);
         return res.status(200).json({
             success: true,
             order
@@ -152,6 +174,34 @@ export const markAsDelivered = async (req, res, next) => {
             success: true,
             message: 'Order marked as delivered',
             order
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+export const deleteOrder = async (req, res, next) => {
+    try {
+        await orderService.deleteOrder(req.params.id);
+        return res.status(200).json({
+            success: true,
+            message: 'Order deleted successfully'
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+export const bulkDeleteOrders = async (req, res, next) => {
+    try {
+        const { ids } = req.body;
+        if (!ids || !Array.isArray(ids) || ids.length === 0) {
+            return res.status(400).json({ success: false, message: 'No order IDs provided' });
+        }
+        await orderService.bulkDeleteOrders(ids);
+        return res.status(200).json({
+            success: true,
+            message: `${ids.length} orders deleted successfully`
         });
     } catch (error) {
         next(error);

@@ -6,6 +6,9 @@ const router = express.Router();
 // Initiate checkout (creates local pending order and initiates Razorpay)
 router.post('/initiate', checkoutController.initiateCheckout);
 
+// Cancel checkout session (deletes/cancels the order if payment not made and restores stock)
+router.post('/cancel', checkoutController.cancelCheckout);
+
 // Fetch session order details for checkout portal
 router.get('/order/:id', checkoutController.getCheckoutOrder);
 

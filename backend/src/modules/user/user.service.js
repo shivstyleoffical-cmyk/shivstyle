@@ -677,6 +677,69 @@ class UserService {
             return address;
         });
     }
+
+    /**
+     * Delete a single customer and all their associations (orders, addresses, wishlist, roles)
+     */
+    async deleteUser(id) {
+        const { Op } = await import('sequelize');
+        const user = await User.findByPk(id);
+        if (!user) {
+            const error = new Error('User not found');
+            error.statusCode = 404;
+            throw error;
+        }
+
+        return await sequelize.transaction(async (t) => {
+            // Find all user orders
+            const orders = await sequelize.models.order.findAll({ where: { user_id: id }, transaction: t });
+            const orderIds = orders.map(o => o.id);
+
+            if (orderIds.length > 0) {
+                await sequelize.models.orderShippingAddress.destroy({ where: { order_id: { [Op.in]: orderIds } }, transaction: t });
+                await sequelize.models.orderItem.destroy({ where: { order_id: { [Op.in]: orderIds } }, transaction: t });
+                await sequelize.models.order.destroy({ where: { id: { [Op.in]: orderIds } }, transaction: t });
+            }
+
+            await Address.destroy({ where: { user_id: id }, transaction: t });
+            await sequelize.models.wishlist.destroy({ where: { user_id: id }, transaction: t });
+            await sequelize.models.notification.destroy({ where: { user_id: id }, transaction: t });
+            await sequelize.models.userRole.destroy({ where: { user_id: id }, transaction: t });
+            await user.destroy({ transaction: t });
+            return true;
+        });
+    }
+
+    /**
+     * Bulk delete customers and all their associations (Admin only)
+     */
+    async bulkDeleteUsers(ids) {
+        if (!ids || !Array.isArray(ids) || ids.length === 0) return false;
+        const { Op } = await import('sequelize');
+
+        return await sequelize.transaction(async (t) => {
+            await sequelize.models.userRole.destroy({ where: { user_id: { [Op.in]: ids } }, transaction: t });
+            await Address.destroy({ where: { user_id: { [Op.in]: ids } }, transaction: t });
+            await sequelize.models.wishlist.destroy({ where: { user_id: { [Op.in]: ids } }, transaction: t });
+            await sequelize.models.notification.destroy({ where: { user_id: { [Op.in]: ids } }, transaction: t });
+
+            const orders = await sequelize.models.order.findAll({ 
+                where: { user_id: { [Op.in]: ids } }, 
+                attributes: ['id'],
+                transaction: t 
+            });
+            const orderIds = orders.map(o => o.id);
+
+            if (orderIds.length > 0) {
+                await sequelize.models.orderShippingAddress.destroy({ where: { order_id: { [Op.in]: orderIds } }, transaction: t });
+                await sequelize.models.orderItem.destroy({ where: { order_id: { [Op.in]: orderIds } }, transaction: t });
+                await sequelize.models.order.destroy({ where: { id: { [Op.in]: orderIds } }, transaction: t });
+            }
+
+            await User.destroy({ where: { id: { [Op.in]: ids } }, transaction: t });
+            return true;
+        });
+    }
 }
 
 export default new UserService();

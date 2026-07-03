@@ -227,3 +227,31 @@ export const setDefaultAddress = async (req, res, next) => {
         next(error);
     }
 };
+
+export const deleteUser = async (req, res, next) => {
+    try {
+        await userService.deleteUser(req.params.id);
+        return res.status(200).json({
+            success: true,
+            message: 'Customer deleted successfully'
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+export const bulkDeleteUsers = async (req, res, next) => {
+    try {
+        const { ids } = req.body;
+        if (!ids || !Array.isArray(ids) || ids.length === 0) {
+            return res.status(400).json({ success: false, message: 'No customer IDs provided' });
+        }
+        await userService.bulkDeleteUsers(ids);
+        return res.status(200).json({
+            success: true,
+            message: `${ids.length} customers deleted successfully`
+        });
+    } catch (error) {
+        next(error);
+    }
+};

@@ -1,11 +1,12 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Table, Tag, Avatar, message, Input, Select, Grid } from 'antd';
+import { Table, Tag, Avatar, message, Input, Select, Grid, Button, Modal } from 'antd';
 import { 
   MailOutlined,
   PhoneOutlined,
   CalendarOutlined,
   SearchOutlined,
   VerifiedOutlined,
+  DeleteOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { userService } from '../services/userService';
@@ -26,6 +27,58 @@ const Customers: React.FC = () => {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [totalRows, setTotalRows] = useState(0);
+  const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
+
+  const handleDeleteUser = (userId: string) => {
+    Modal.confirm({
+      title: 'Are you sure you want to delete this customer?',
+      content: 'This will permanently remove the customer profile, their delivery addresses, wishlist items, and associated order history. This action cannot be undone.',
+      okText: 'Yes, Delete',
+      okType: 'danger',
+      cancelText: 'Cancel',
+      centered: true,
+      onOk: async () => {
+        try {
+          await userService.delete(userId);
+          message.success('Customer deleted successfully');
+          fetchUsers();
+        } catch (error) {
+          message.error('Failed to delete customer');
+        }
+      }
+    });
+  };
+
+  const handleBulkDeleteUsers = () => {
+    Modal.confirm({
+      title: 'Bulk Delete Customers',
+      content: `Are you sure you want to permanently delete the ${selectedRowKeys.length} selected customers and all their history? This action cannot be undone.`,
+      okText: 'Yes, Delete All',
+      okType: 'danger',
+      cancelText: 'Cancel',
+      centered: true,
+      onOk: async () => {
+        try {
+          const ids = selectedRowKeys.map(key => String(key));
+          await userService.bulkDelete(ids);
+          message.success(`${ids.length} customers deleted successfully`);
+          setSelectedRowKeys([]);
+          fetchUsers();
+        } catch (error) {
+          message.error('Failed to delete selected customers');
+        }
+      }
+    });
+  };
+
+  const onSelectChange = (newSelectedRowKeys: React.Key[]) => {
+    setSelectedRowKeys(newSelectedRowKeys);
+  };
+
+  const rowSelection = {
+    selectedRowKeys,
+    onChange: onSelectChange,
+  };
 
   // Debounce: only update `search` (BE query) 400ms after user stops typing
   useEffect(() => {
@@ -111,16 +164,36 @@ const Customers: React.FC = () => {
     },
     {
       title: 'Joined',
-      dataIndex: 'created_at',
       key: 'joined',
       width: 150,
-      render: (date: string) => (
-        <div className="flex items-center space-x-2">
-          <CalendarOutlined style={{ fontSize: 12, color: '#9ca3af' }} />
-          <span className="text-sm text-gray-600">
-            {date ? format(new Date(date), 'MMM dd, yyyy') : 'No Date'}
-          </span>
-        </div>
+      render: (_, record: User) => {
+        const date = record.createdAt || record.created_at;
+        return (
+          <div className="flex items-center space-x-2">
+            <CalendarOutlined style={{ fontSize: 12, color: '#9ca3af' }} />
+            <span className="text-sm text-gray-600">
+              {date ? format(new Date(date), 'MMM dd, yyyy') : 'No Date'}
+            </span>
+          </div>
+        );
+      },
+    },
+    {
+      title: 'Action',
+      key: 'action',
+      width: 100,
+      align: 'center',
+      fixed: isMobile ? undefined : 'right',
+      render: (_, record: User) => (
+        <Button
+          type="primary"
+          danger
+          icon={<DeleteOutlined />}
+          size="small"
+          onClick={() => handleDeleteUser(record.id)}
+        >
+          Delete
+        </Button>
       ),
     },
   ];
@@ -144,6 +217,16 @@ const Customers: React.FC = () => {
               { value: 'false', label: 'Pending' },
             ]}
           />
+          {selectedRowKeys.length > 0 && (
+            <Button
+              type="primary"
+              danger
+              icon={<DeleteOutlined />}
+              onClick={handleBulkDeleteUsers}
+            >
+              Delete Selected ({selectedRowKeys.length})
+            </Button>
+          )}
           <Input
             placeholder="Search customers..."
             prefix={<SearchOutlined className="text-gray-400" />}
@@ -158,6 +241,7 @@ const Customers: React.FC = () => {
       {/* Table */}
       <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden p-1">
         <Table
+          rowSelection={rowSelection}
           columns={columns}
           dataSource={users}
           rowKey="id"

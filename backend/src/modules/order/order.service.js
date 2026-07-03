@@ -251,7 +251,13 @@ class OrderService {
         const { page = 1, limit = 10, status, payment_status, sortBy = 'createdAt', sortOrder = 'DESC' } = query;
         const offset = (page - 1) * limit;
 
-        const whereClause = { user_id: userId };
+        const whereClause = { 
+            user_id: userId,
+            [Op.not]: {
+                payment_type: { [Op.ne]: 'cod' },
+                payment_status: 'not_paid'
+            }
+        };
         if (status) whereClause.status = status;
         if (payment_status) whereClause.payment_status = payment_status;
 
@@ -264,7 +270,14 @@ class OrderService {
                 {
                     model: OrderItem,
                     as: 'orderItems',
-                    attributes: ['id', 'product_name', 'color', 'size', 'price', 'quantity', 'total_amount']
+                    attributes: ['id', 'product_id', 'product_name', 'color', 'size', 'price', 'quantity', 'total_amount'],
+                    include: [
+                        {
+                            model: Product,
+                            as: 'product',
+                            attributes: ['image_url']
+                        }
+                    ]
                 },
                 {
                     model: OrderShippingAddress,
@@ -291,12 +304,53 @@ class OrderService {
             {
                 model: OrderItem,
                 as: 'orderItems',
-                attributes: ['id', 'product_name', 'color', 'size', 'price', 'quantity', 'total_amount']
+                attributes: ['id', 'product_id', 'product_name', 'color', 'size', 'price', 'quantity', 'total_amount'],
+                include: [
+                    {
+                        model: Product,
+                        as: 'product',
+                        attributes: ['image_url']
+                    }
+                ]
             },
             {
                 model: OrderShippingAddress,
                 as: 'shippingAddress',
                 attributes: ['full_name', 'address_line1', 'address_line2', 'city', 'state', 'postal_code', 'country', 'phone']
+            }
+        ]);
+
+        if (!order) {
+            const error = new Error('Order not found');
+            error.statusCode = 404;
+            throw error;
+        }
+        return order;
+    }
+
+    async getOrderByIdAdmin(id) {
+        const order = await orderRepository.findOne({ id }, [
+            {
+                model: OrderItem,
+                as: 'orderItems',
+                attributes: ['id', 'product_id', 'product_name', 'color', 'size', 'price', 'quantity', 'total_amount'],
+                include: [
+                    {
+                        model: Product,
+                        as: 'product',
+                        attributes: ['image_url']
+                    }
+                ]
+            },
+            {
+                model: OrderShippingAddress,
+                as: 'shippingAddress',
+                attributes: ['full_name', 'address_line1', 'address_line2', 'city', 'state', 'postal_code', 'country', 'phone']
+            },
+            {
+                model: User,
+                as: 'user',
+                attributes: ['id', 'name', 'email', 'phone', 'image']
             }
         ]);
 
@@ -373,7 +427,12 @@ class OrderService {
     async getAllOrders(query) {
         const { page = 1, limit = 10, status, payment_status, payment_type, sortBy = 'createdAt', sortOrder = 'DESC', search } = query;
         const offset = (page - 1) * limit;
-        const whereClause = {};
+        const whereClause = {
+            [Op.not]: {
+                payment_type: { [Op.ne]: 'cod' },
+                payment_status: 'not_paid'
+            }
+        };
         if (status) whereClause.status = status;
         if (payment_status) whereClause.payment_status = payment_status;
         if (payment_type) whereClause.payment_type = payment_type;
@@ -400,7 +459,17 @@ class OrderService {
             offset: parseInt(offset),
             order: [[sortBy, sortOrder.toUpperCase()]],
             include: [
-                { model: OrderItem, as: 'orderItems' },
+                {
+                    model: OrderItem,
+                    as: 'orderItems',
+                    include: [
+                        {
+                            model: Product,
+                            as: 'product',
+                            attributes: ['image_url']
+                        }
+                    ]
+                },
                 { model: OrderShippingAddress, as: 'shippingAddress' },
                 {
                     model: User,
@@ -483,6 +552,126 @@ class OrderService {
         order.updatedAt = new Date();
 
         return await orderRepository.save(order);
+    }
+
+    /**
+     * Delete a single order and its items & shipping address
+     */
+    async deleteOrder(id) {
+        const order = await orderRepository.findByPk(id);
+        if (!order) {
+            const error = new Error('Order not found');
+            error.statusCode = 404;
+            throw error;
+        }
+
+        return await sequelize.transaction(async (t) => {
+            await sequelize.models.orderShippingAddress.destroy({ where: { order_id: id }, transaction: t });
+            await sequelize.models.orderItem.destroy({ where: { order_id: id }, transaction: t });
+            await sequelize.models.order.destroy({ where: { id: id }, transaction: t });
+            return true;
+        });
+    }
+
+    /**
+     * Bulk delete orders and their items & shipping addresses
+     */
+    async bulkDeleteOrders(ids) {
+        if (!ids || !Array.isArray(ids) || ids.length === 0) return false;
+
+        return await sequelize.transaction(async (t) => {
+            await sequelize.models.orderShippingAddress.destroy({ where: { order_id: { [Op.in]: ids } }, transaction: t });
+            await sequelize.models.orderItem.destroy({ where: { order_id: { [Op.in]: ids } }, transaction: t });
+            await sequelize.models.order.destroy({ where: { id: { [Op.in]: ids } }, transaction: t });
+            return true;
+        });
+    }
+
+    // ─── Public order tracker (no auth required) ────────────────────────────
+    async lookupOrder(orderNumber, identifier) {
+        if (!orderNumber || !identifier) {
+            const err = new Error('Order not found.');
+            err.statusCode = 404;
+            throw err;
+        }
+
+        const normalizedIdentifier = identifier.toString().trim().toLowerCase();
+
+        const order = await orderRepository.findOne(
+            { order_number: orderNumber },
+            [
+                {
+                    model: OrderItem,
+                    as: 'orderItems',
+                    attributes: ['id', 'product_name', 'color', 'size', 'price', 'quantity', 'total_amount'],
+                    include: [{ model: Product, as: 'product', attributes: ['image_url'] }]
+                },
+                {
+                    model: OrderShippingAddress,
+                    as: 'shippingAddress',
+                    attributes: ['full_name', 'address_line1', 'address_line2', 'city', 'state', 'postal_code', 'country', 'phone']
+                },
+                {
+                    model: User,
+                    as: 'user',
+                    attributes: ['email', 'phone']
+                }
+            ]
+        );
+
+        // Generic 404 — never reveal whether the order number exists
+        if (!order) {
+            const err = new Error('Order not found.');
+            err.statusCode = 404;
+            throw err;
+        }
+
+        // Verify identifier matches email or phone (case-insensitive, normalized)
+        const userEmail = (order.user?.email || '').toLowerCase().trim();
+        const userPhone = (order.user?.phone || '').replace(/\s+/g, '').replace(/^\+91/, '');
+        const shipPhone = (order.shippingAddress?.phone || '').replace(/\s+/g, '').replace(/^\+91/, '');
+        const normalizedInput = normalizedIdentifier.replace(/\s+/g, '').replace(/^\+91/, '');
+
+        const matched =
+            normalizedInput === userEmail ||
+            normalizedInput === userPhone ||
+            normalizedInput === shipPhone;
+
+        if (!matched) {
+            // Same generic message — don't reveal order exists
+            const err = new Error('Order not found.');
+            err.statusCode = 404;
+            throw err;
+        }
+
+        // Mask PII for the response (partial masking only)
+        const maskedEmail = userEmail
+            ? userEmail.replace(/(.{2}).+(@.+)/, '$1***$2')
+            : null;
+        const maskedPhone = (order.user?.phone || shipPhone)
+            ? (order.user?.phone || shipPhone).slice(0, -4).replace(/./g, '*') + (order.user?.phone || shipPhone).slice(-4)
+            : null;
+
+        return {
+            order_number: order.order_number,
+            status: order.status,
+            payment_status: order.payment_status,
+            payment_type: order.payment_type,
+            total_amount: order.total_amount,
+            shipping_amount: order.shipping_amount,
+            discount_amount: order.discount_amount,
+            net_amount: order.net_amount,
+            coupon_code: order.coupon_code,
+            delivery_partner: order.delivery_partner,
+            tracking_number: order.tracking_number,
+            createdAt: order.createdAt,
+            orderItems: order.orderItems,
+            shippingAddress: order.shippingAddress,
+            customer: {
+                email: maskedEmail,
+                phone: maskedPhone
+            }
+        };
     }
 
 }

@@ -105,7 +105,6 @@ class ProductService {
             sizes,
             colors,
             fabric,
-            sleeves,
             minRating
         } = queryParams;
 
@@ -298,49 +297,7 @@ class ProductService {
             });
         }
 
-        if (sleeves) {
-            const sleevesArray = sleeves.split(',');
-            whereClause[Op.and] = whereClause[Op.and] || [];
-            whereClause[Op.and].push({
-                [Op.or]: sleevesArray.map(sl => {
-                    const s = sl.toLowerCase();
-                    if (s.includes('short')) {
-                        return {
-                            [Op.or]: [
-                                { tags: { [Op.iLike]: '%short sleeve%' } },
-                                { tags: { [Op.iLike]: '%tee%' } },
-                                { tags: { [Op.iLike]: '%t-shirt%' } },
-                                { tags: { [Op.iLike]: '%half sleeve%' } },
-                                { description: { [Op.iLike]: '%short sleeve%' } },
-                                { description: { [Op.iLike]: '%half sleeve%' } }
-                            ]
-                        };
-                    }
-                    if (s.includes('long')) {
-                        return {
-                            [Op.or]: [
-                                { tags: { [Op.iLike]: '%long sleeve%' } },
-                                { tags: { [Op.iLike]: '%full sleeve%' } },
-                                { tags: { [Op.iLike]: '%jacket%' } },
-                                { tags: { [Op.iLike]: '%blouse%' } },
-                                { description: { [Op.iLike]: '%long sleeve%' } },
-                                { description: { [Op.iLike]: '%full sleeve%' } }
-                            ]
-                        };
-                    }
-                    if (s.includes('sleeveless')) {
-                        return {
-                            [Op.or]: [
-                                { tags: { [Op.iLike]: '%sleeveless%' } },
-                                { tags: { [Op.iLike]: '%tank%' } },
-                                { description: { [Op.iLike]: '%sleeveless%' } }
-                            ]
-                        };
-                    }
-                    return { tags: { [Op.iLike]: `%${s}%` } };
-                })
-            });
-        }
+
 
         let orderClause;
         if (sortBy === 'relevance') {

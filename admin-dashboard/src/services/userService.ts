@@ -18,4 +18,12 @@ export const userService = {
     });
     return response.data.user;
   },
+
+  delete: async (id: string): Promise<void> => {
+    await api.delete(`/users/admin/users/${id}`);
+  },
+
+  bulkDelete: async (ids: string[]): Promise<void> => {
+    await api.delete('/users/admin/users/bulk', { data: { ids } });
+  },
 };

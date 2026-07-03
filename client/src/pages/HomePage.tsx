@@ -12,7 +12,7 @@ const HomePage: React.FC = () => {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const data = await fetchProducts();
+        const data = await fetchProducts({ limit: 8 });
         // The API returns { success: true, products: [...] }
         setProducts(data.products || []);
       } catch (error) {
@@ -76,8 +76,15 @@ const HomePage: React.FC = () => {
         </div>
 
         {loading ? (
-          <div className="flex justify-center py-20">
-            <div className="w-12 h-12 border-4 border-gray-200 border-t-brand-accent rounded-full animate-spin"></div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+            {Array.from({ length: 8 }).map((_, index) => (
+              <div key={index} className="flex flex-col">
+                <div className="relative aspect-[3/4] rounded-xl overflow-hidden skeleton-shimmer mb-4 border border-gray-100 shadow-sm"></div>
+                <div className="h-4 w-3/4 skeleton-shimmer rounded mb-2"></div>
+                <div className="h-3 w-1/4 skeleton-shimmer rounded mb-2"></div>
+                <div className="h-4 w-1/3 skeleton-shimmer rounded"></div>
+              </div>
+            ))}
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">

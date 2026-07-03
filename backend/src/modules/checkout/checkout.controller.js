@@ -223,6 +223,10 @@ export const initiateCheckout = async (req, res, next) => {
             use_coins: false
         });
 
+        // Ensure newly initiated checkout order is marked as unpaid until verified
+        order.payment_status = 'not_paid';
+        await order.save();
+
         // Calculate amount from items directly — order.net_amount may be null/0 from OrderService
         const itemsTotal = dbItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
         const orderNetAmount = parseFloat(order.net_amount) || parseFloat(order.total_amount) || itemsTotal;
@@ -306,13 +310,57 @@ export const completeCheckout = async (req, res, next) => {
         }
 
         // Update Guest User details
-        const user = await User.findByPk(order.user_id);
-        if (user) {
-            user.name = customerDetails.name;
-            user.email = customerDetails.email || null;
-            user.phone = customerDetails.phone;
-            user.is_verified = true;
-            await user.save();
+        const guestUserId = order.user_id;
+        const email = customerDetails.email ? customerDetails.email.trim().toLowerCase() : null;
+
+        if (email) {
+            const existingUser = await User.findOne({ where: { email } });
+            if (existingUser) {
+                // Link order to existing user instead of temporary guest user
+                order.user_id = existingUser.id;
+                await order.save();
+
+                let userChanged = false;
+                const finalName = customerDetails.name && customerDetails.name !== 'Guest Customer' ? customerDetails.name : null;
+                if (finalName && (!existingUser.name || existingUser.name === 'Guest Customer')) {
+                    existingUser.name = finalName;
+                    userChanged = true;
+                }
+                if (customerDetails.phone && !existingUser.phone) {
+                    existingUser.phone = customerDetails.phone;
+                    userChanged = true;
+                }
+                if (userChanged) {
+                    await existingUser.save();
+                }
+
+                // Delete the temporary guest user to clean up
+                try {
+                    const guestUser = await User.findByPk(guestUserId);
+                    if (guestUser && guestUser.id !== existingUser.id) {
+                        await guestUser.destroy();
+                    }
+                } catch (destroyErr) {
+                    console.warn("Failed to delete temporary guest user:", destroyErr.message);
+                }
+            } else {
+                const user = await User.findByPk(guestUserId);
+                if (user) {
+                    user.name = customerDetails.name || user.name;
+                    user.email = email;
+                    user.phone = customerDetails.phone || user.phone;
+                    user.is_verified = true;
+                    await user.save();
+                }
+            }
+        } else {
+            const user = await User.findByPk(guestUserId);
+            if (user) {
+                user.name = customerDetails.name || user.name;
+                user.phone = customerDetails.phone || user.phone;
+                user.is_verified = true;
+                await user.save();
+            }
         }
 
         // Update Shipping Address details
@@ -554,13 +602,56 @@ export const verifyPayment = async (req, res, next) => {
             }
 
             // Save customer profile details
-            const user = await User.findByPk(order.user_id);
-            if (user) {
-                user.name = customerDetails.name || user.name;
-                user.email = customerDetails.email || user.email;
-                user.phone = customerDetails.phone || user.phone;
-                user.is_verified = true;
-                await user.save();
+            const guestUserId = order.user_id;
+            const email = customerDetails.email ? customerDetails.email.trim().toLowerCase() : null;
+
+            if (email) {
+                const existingUser = await User.findOne({ where: { email } });
+                if (existingUser) {
+                    order.user_id = existingUser.id;
+                    await order.save();
+
+                    let userChanged = false;
+                    const finalName = customerDetails.name && customerDetails.name !== 'Guest Customer' ? customerDetails.name : null;
+                    if (finalName && (!existingUser.name || existingUser.name === 'Guest Customer')) {
+                        existingUser.name = finalName;
+                        userChanged = true;
+                    }
+                    if (customerDetails.phone && !existingUser.phone) {
+                        existingUser.phone = customerDetails.phone;
+                        userChanged = true;
+                    }
+                    if (userChanged) {
+                        await existingUser.save();
+                    }
+
+                    // Delete the temporary guest user to clean up
+                    try {
+                        const guestUser = await User.findByPk(guestUserId);
+                        if (guestUser && guestUser.id !== existingUser.id) {
+                            await guestUser.destroy();
+                        }
+                    } catch (destroyErr) {
+                        console.warn("Failed to delete temporary guest user:", destroyErr.message);
+                    }
+                } else {
+                    const user = await User.findByPk(guestUserId);
+                    if (user) {
+                        user.name = customerDetails.name && customerDetails.name !== 'Guest Customer' ? customerDetails.name : user.name;
+                        user.email = email;
+                        user.phone = customerDetails.phone || user.phone;
+                        user.is_verified = true;
+                        await user.save();
+                    }
+                }
+            } else {
+                const user = await User.findByPk(guestUserId);
+                if (user) {
+                    user.name = customerDetails.name && customerDetails.name !== 'Guest Customer' ? customerDetails.name : user.name;
+                    user.phone = customerDetails.phone || user.phone;
+                    user.is_verified = true;
+                    await user.save();
+                }
             }
 
             // Save actual delivery shipping address details
@@ -593,8 +684,21 @@ export const verifyPayment = async (req, res, next) => {
                 }
             }
 
-            order.payment_type = 'upi';
-            order.payment_status = 'paid';
+            let paymentType = 'upi';
+            let paymentStatus = 'paid';
+
+            if (rzpPaymentDetails && rzpPaymentDetails.method) {
+                const method = rzpPaymentDetails.method.toLowerCase();
+                paymentType = method;
+                if (method === 'cod') {
+                    paymentStatus = 'not_paid';
+                } else {
+                    paymentStatus = 'paid';
+                }
+            }
+
+            order.payment_type = paymentType;
+            order.payment_status = paymentStatus;
             order.payment_transaction_id = razorpayPaymentId;
             order.status = 'placed';
             await order.save();
@@ -647,6 +751,9 @@ export const handleWebhook = async (req, res, next) => {
             if (order && order.payment_status !== 'paid') {
                 order.payment_status = 'paid';
                 order.payment_transaction_id = rzpPaymentId;
+                if (paymentEntity.method) {
+                    order.payment_type = paymentEntity.method.toLowerCase();
+                }
                 order.status = 'placed';
                 await order.save();
 
@@ -727,7 +834,7 @@ export const getMagicShippingInfo = async (req, res, next) => {
             const responseAddresses = addresses.map((addr, index) => ({
                 id: addr.id !== undefined && addr.id !== null ? addr.id : index,
                 serviceable: true,
-                cod: true,
+                cod: false,
                 cod_fee: 0,
                 shipping_fee: shippingFeeInPaise
             }));
@@ -742,7 +849,7 @@ export const getMagicShippingInfo = async (req, res, next) => {
         // Fallback: flat format for older Razorpay API versions
         responseData = {
             serviceable: true,
-            cod: true,
+            cod: false,
             cod_fee: 0,
             shipping_fee: shippingFeeInPaise
         };
@@ -755,7 +862,7 @@ export const getMagicShippingInfo = async (req, res, next) => {
         console.error('Shipping Error:', error);
         responseData = {
             serviceable: true,
-            cod: true,
+            cod: false,
             cod_fee: 0,
             shipping_fee: 5000
         };
@@ -971,5 +1078,67 @@ export const applyMagicPromotion = async (req, res, next) => {
         res.setHeader('Content-Type', 'application/json');
         await logToDb('/api/checkout/apply-promotion', req.method, req.headers, req.body, responseData);
         return res.status(200).json(responseData);
+    }
+};
+
+/**
+ * Cancel initiated checkout session (restores stock, cleans up draft order)
+ */
+export const cancelCheckout = async (req, res, next) => {
+    try {
+        const { orderId } = req.body;
+        if (!orderId) {
+            return res.status(400).json({ success: false, message: 'orderId is required' });
+        }
+
+        const order = await Order.findByPk(orderId);
+        if (!order) {
+            return res.status(404).json({ success: false, message: 'Order not found' });
+        }
+
+        // Only cancel if payment is not paid
+        if (order.payment_status === 'not_paid') {
+            await Order.sequelize.transaction(async (t) => {
+                // 1. Restore stock
+                const orderItems = await OrderItem.findAll({ where: { order_id: orderId }, transaction: t });
+                for (const item of orderItems) {
+                    if (item.product_variant_id) {
+                        const variant = await ProductVariant.findByPk(item.product_variant_id, { transaction: t });
+                        if (variant) {
+                            variant.stock_quantity += item.quantity;
+                            await variant.save({ transaction: t });
+                        }
+                    } else {
+                        const product = await Product.findByPk(item.product_id, { transaction: t });
+                        if (product) {
+                            product.stock_quantity += item.quantity;
+                            await product.save({ transaction: t });
+                        }
+                    }
+                }
+
+                // 2. Delete shipping address
+                await OrderShippingAddress.destroy({ where: { order_id: orderId }, transaction: t });
+
+                // 3. Delete order items
+                await OrderItem.destroy({ where: { order_id: orderId }, transaction: t });
+
+                // 4. Delete order
+                await Order.destroy({ where: { id: orderId }, transaction: t });
+
+                // 5. If temporary guest user, clean it up as well
+                const user = await User.findByPk(order.user_id, { transaction: t });
+                if (user && !user.email && !user.phone) {
+                    await user.destroy({ transaction: t });
+                }
+            });
+
+            console.log(`[Checkout] Cancelled checkout session and cleaned up order: ${orderId}`);
+            return res.status(200).json({ success: true, message: 'Checkout cancelled and stock restored' });
+        }
+
+        return res.status(400).json({ success: false, message: 'Cannot cancel a paid or processed order' });
+    } catch (error) {
+        next(error);
     }
 };

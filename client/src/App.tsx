@@ -12,6 +12,7 @@ import ShippingPage from './pages/ShippingPage';
 import ReturnsPage from './pages/ReturnsPage';
 import PrivacyPage from './pages/PrivacyPage';
 import TermsPage from './pages/TermsPage';
+import TrackOrderPage from './pages/TrackOrderPage';
 import { CartProvider } from './context/CartContext';
 
 function ScrollToTop() {
@@ -42,6 +43,7 @@ function AppContent() {
           <Route path="/support/returns" element={<ReturnsPage />} />
           <Route path="/privacy" element={<PrivacyPage />} />
           <Route path="/terms" element={<TermsPage />} />
+          <Route path="/track-order" element={<TrackOrderPage />} />
         </Routes>
       </main>
       <Footer />

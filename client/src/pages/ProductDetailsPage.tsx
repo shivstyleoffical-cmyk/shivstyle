@@ -304,9 +304,15 @@ const ProductDetailsPage: React.FC = () => {
             color: '#10B981'
           },
           modal: {
-            ondismiss: () => {
+            ondismiss: async () => {
               setLoading(false);
               console.log("Checkout modal dismissed.");
+              try {
+                await api.post('/checkout/cancel', { orderId: data.orderId });
+                console.log("Checkout cancelled and stock restored successfully.");
+              } catch (cancelErr) {
+                console.error("Error cancelling checkout:", cancelErr);
+              }
             }
           }
         };

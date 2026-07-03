@@ -5,7 +5,8 @@ export interface User {
   phone?: string;
   image?: string;
   is_verified: boolean;
-  created_at: string;
+  created_at?: string;
+  createdAt?: string;
   roles?: Role[];
   addresses?: UserAddress[];
 }
@@ -37,8 +38,10 @@ export interface Category {
   parent_cat_id?: string;
   status: 'active' | 'inactive';
   is_active?: boolean; // Keep for compatibility if needed
-  created_at: string;
-  updated_at: string;
+  created_at?: string;
+  updated_at?: string;
+  createdAt?: string;
+  updatedAt?: string;
   parent?: {
     id: string;
     category_name: string;
@@ -66,8 +69,10 @@ export interface Product {
   original_price?: number;
   status: 'active' | 'inactive';
   is_active?: boolean; // For compatibility
-  created_at: string;
-  updated_at: string;
+  created_at?: string;
+  updated_at?: string;
+  createdAt?: string;
+  updatedAt?: string;
   category?: Category;
   variants?: ProductVariant[];
   images?: ProductImage[];
@@ -119,8 +124,11 @@ export interface Order {
   estimated_delivery_date?: string;
   actual_delivery_date?: string;
   delivery_notes?: string;
-  created_at: string;
-  updated_at: string;
+  coupon_code?: string;
+  created_at?: string;
+  updated_at?: string;
+  createdAt?: string;
+  updatedAt?: string;
   user?: User;
   orderItems?: OrderItem[];
   shippingAddress?: OrderShippingAddress;
@@ -167,7 +175,8 @@ export interface Coupon {
   usage_limit?: number;
   used_count: number;
   status: 'active' | 'inactive';
-  created_at: string;
+  created_at?: string;
+  createdAt?: string;
 }
 
 export interface DashboardStats {

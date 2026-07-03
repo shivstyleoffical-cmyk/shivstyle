@@ -16,7 +16,9 @@ import {
     addAddress,
     updateAddress,
     deleteAddress,
-    setDefaultAddress
+    setDefaultAddress,
+    deleteUser,
+    bulkDeleteUsers
 } from './user.controller.js';
 
 import {
@@ -67,6 +69,8 @@ userRoutes.post('/reset-password', resetPasswordValidation, resetPassword);
 
 // Admin routes
 userRoutes.get('/admin/all-users', authMiddleware, adminOrSuperAdminMiddleware, getAllUsers);
+userRoutes.delete('/admin/users/bulk', authMiddleware, adminOrSuperAdminMiddleware, bulkDeleteUsers);
+userRoutes.delete('/admin/users/:id', authMiddleware, adminOrSuperAdminMiddleware, deleteUser);
 
 // Address routes
 userRoutes.get('/addresses', authMiddleware, getUserAddresses);

@@ -8,7 +8,7 @@ export const orderService = {
   },
 
   getById: async (id: string): Promise<Order> => {
-    const response = await api.get(`/orders/${id}`);
+    const response = await api.get(`/orders/admin/${id}`);
     return response.data.order;
   },
 
@@ -20,5 +20,13 @@ export const orderService = {
   getStatistics: async (): Promise<any> => {
     const response = await api.get('/orders/admin/statistics');
     return response.data;
+  },
+
+  delete: async (id: string): Promise<void> => {
+    await api.delete(`/orders/admin/${id}`);
+  },
+
+  bulkDelete: async (ids: string[]): Promise<void> => {
+    await api.delete('/orders/admin/orders/bulk', { data: { ids } });
   },
 };

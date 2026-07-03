@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { ShoppingBag, Search, Menu, X, ChevronDown, Plus, Minus, Trash2, Loader } from 'lucide-react';
+import { ShoppingBag, Search, Menu, X, ChevronDown, Plus, Minus, Trash2, Loader, Package } from 'lucide-react';
 import logo from '../../assets/logo.png';
 import api, { fetchCategories, searchProducts } from '../../services/api';
 import { useCart } from '../../context/CartContext';
@@ -72,8 +72,21 @@ const Navbar: React.FC = () => {
   useEffect(() => {
     const loadCategories = async () => {
       try {
+        const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+        const cachedCats = sessionStorage.getItem('categories_cache');
+        const cachedAt   = sessionStorage.getItem('categories_cache_ts');
+        const isFresh    = cachedCats && cachedAt && (Date.now() - Number(cachedAt)) < CACHE_TTL;
+
+        if (isFresh) {
+          setCategories(JSON.parse(cachedCats!));
+          return;
+        }
+
         const catData = await fetchCategories();
-        setCategories(catData.categories || []);
+        const categoriesList = catData.categories || [];
+        setCategories(categoriesList);
+        sessionStorage.setItem('categories_cache',    JSON.stringify(categoriesList));
+        sessionStorage.setItem('categories_cache_ts', Date.now().toString());
       } catch (error) {
         console.error("Failed to load categories in navbar:", error);
       }
@@ -321,6 +334,15 @@ const Navbar: React.FC = () => {
               >
                 <Search size={20} strokeWidth={1.5} />
               </button>
+              {/* Track Order icon */}
+              <Link
+                to="/track-order"
+                title="Track My Order"
+                className="hidden md:flex items-center gap-1.5 text-black hover:text-brand-accent transition-colors"
+              >
+                <Package size={20} strokeWidth={1.5} />
+                <span className="hidden lg:block text-[11px] font-bold uppercase tracking-widest">Track</span>
+              </Link>
               <button 
                 onClick={() => setIsCartOpen(true)}
                 className="text-black hover:text-brand-accent transition-colors relative flex items-center space-x-2"
@@ -758,8 +780,14 @@ const Navbar: React.FC = () => {
                                 color: '#10B981' // Green theme matching Magic Checkout
                               },
                               modal: {
-                                ondismiss: () => {
+                                ondismiss: async () => {
                                   console.log("Checkout modal dismissed.");
+                                  try {
+                                    await api.post('/checkout/cancel', { orderId: data.orderId });
+                                    console.log("Checkout cancelled and stock restored successfully.");
+                                  } catch (cancelErr) {
+                                    console.error("Error cancelling checkout:", cancelErr);
+                                  }
                                 }
                               }
                             };

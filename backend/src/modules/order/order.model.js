@@ -53,7 +53,7 @@ const Order = sequelize.define('order', {
         defaultValue: 'not_paid'
     },
     payment_type: {
-        type: DataTypes.ENUM('netbanking', 'upi', 'cod'),
+        type: DataTypes.STRING,
         allowNull: true
     },
     payment_transaction_id: {

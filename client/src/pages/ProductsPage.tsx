@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams, useParams, useNavigate, useLocation } from 'react-router-dom';
 import { fetchProducts, fetchCategories } from '../services/api';
 import ProductCard from '../components/ui/ProductCard';
@@ -18,14 +18,19 @@ const ProductsPage: React.FC = () => {
   const [totalProducts, setTotalProducts] = useState(0);
   const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false);
 
+  // Pagination states for Infinite Scroll
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const observerRef = useRef<HTMLDivElement | null>(null);
+
   // Accordion section open/close states
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
     category: true,
     price: true,
     size: true,
     color: true,
-    fabric: true,
-    sleeves: true
+    fabric: true
   });
 
   const toggleSection = (section: string) => {
@@ -50,12 +55,10 @@ const ProductsPage: React.FC = () => {
   const sizesParam = searchParams.get('sizes') || '';
   const colorsParam = searchParams.get('colors') || '';
   const fabricParam = searchParams.get('fabric') || '';
-  const sleevesParam = searchParams.get('sleeves') || '';
 
   const selectedSizes = sizesParam ? sizesParam.split(',') : [];
   const selectedColors = colorsParam ? colorsParam.split(',') : [];
   const selectedFabrics = fabricParam ? fabricParam.split(',') : [];
-  const selectedSleeves = sleevesParam ? sleevesParam.split(',') : [];
 
   // Load categories once on mount
   useEffect(() => {
@@ -111,7 +114,7 @@ const ProductsPage: React.FC = () => {
         } else {
           next.delete('minPrice');
         }
-        if (maxPriceInput.trim() !== '') {
+        if (maxPriceInput.trim() !== '' && Number(maxPriceInput) < 10000) {
           next.set('maxPrice', maxPriceInput);
         } else {
           next.delete('maxPrice');
@@ -150,44 +153,95 @@ const ProductsPage: React.FC = () => {
     }
   };
 
-  // Fetch products when query filters change (with 300ms debounce)
-  useEffect(() => {
-    const loadProducts = async () => {
+  // Core load function that supports both initial fetching and page loading
+  const loadProducts = async (targetPage: number, isInitial: boolean) => {
+    if (isInitial) {
       setLoading(true);
-      try {
-        const params: any = {
-          limit: 50,
-          sortBy,
-          sortOrder,
-        };
-        if (searchParam) params.search = searchParam;
-        if (selectedCategory) params.category_id = selectedCategory;
-        if (minPriceParam) params.minPrice = minPriceParam;
-        if (maxPriceParam) params.maxPrice = maxPriceParam;
-        if (sizesParam) params.sizes = sizesParam;
-        if (colorsParam) params.colors = colorsParam;
-        if (fabricParam) params.fabric = fabricParam;
-        if (sleevesParam) params.sleeves = sleevesParam;
-        if (isSalePage) params.is_on_sale = 'true';
+    } else {
+      setLoadingMore(true);
+    }
+    try {
+      const params: any = {
+        page: targetPage,
+        limit: 12,
+        sortBy,
+        sortOrder,
+      };
+      if (searchParam) params.search = searchParam;
+      if (selectedCategory) params.category_id = selectedCategory;
+      if (minPriceParam) params.minPrice = minPriceParam;
+      if (maxPriceParam) params.maxPrice = maxPriceParam;
+      if (sizesParam) params.sizes = sizesParam;
+      if (colorsParam) params.colors = colorsParam;
+      if (fabricParam) params.fabric = fabricParam;
+      if (isSalePage) params.is_on_sale = 'true';
 
-        const data = await fetchProducts(params);
-        setProducts(data.products || []);
-        if (data.pagination) {
-          setTotalProducts(data.pagination.total);
-        }
-      } catch (error) {
-        console.error("Failed to fetch products:", error);
-      } finally {
-        setLoading(false);
+      const data = await fetchProducts(params);
+      const newProducts = data.products || [];
+
+      if (isInitial) {
+        setProducts(newProducts);
+      } else {
+        setProducts(prev => [...prev, ...newProducts]);
       }
-    };
 
+      if (data.pagination) {
+        setTotalProducts(data.pagination.total);
+        setHasMore(targetPage < data.pagination.totalPages);
+      } else {
+        // Fallback check
+        setHasMore(newProducts.length === 12);
+      }
+    } catch (error) {
+      console.error("Failed to fetch products:", error);
+    } finally {
+      setLoading(false);
+      setLoadingMore(false);
+    }
+  };
+
+  // Trigger page 1 clean load when query parameters/filters change
+  useEffect(() => {
+    setPage(1);
+    setHasMore(true);
     const timer = setTimeout(() => {
-      loadProducts();
+      loadProducts(1, true);
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [searchParam, selectedCategory, sortBy, sortOrder, minPriceParam, maxPriceParam, sizesParam, colorsParam, fabricParam, sleevesParam, isSalePage]);
+  }, [searchParam, selectedCategory, sortBy, sortOrder, minPriceParam, maxPriceParam, sizesParam, colorsParam, fabricParam, isSalePage]);
+
+  // Load next pages when page changes
+  useEffect(() => {
+    if (page > 1) {
+      loadProducts(page, false);
+    }
+  }, [page]);
+
+  // IntersectionObserver to watch bottom of the grid and auto load more
+  useEffect(() => {
+    if (loading || loadingMore || !hasMore) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setPage(prev => prev + 1);
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    const currentTrigger = observerRef.current;
+    if (currentTrigger) {
+      observer.observe(currentTrigger);
+    }
+
+    return () => {
+      if (currentTrigger) {
+        observer.unobserve(currentTrigger);
+      }
+    };
+  }, [loading, loadingMore, hasMore]);
 
   const handleCategoryClick = (cat: any) => {
     const newParams = new URLSearchParams(searchParams);
@@ -286,22 +340,7 @@ const ProductsPage: React.FC = () => {
     }, { replace: true });
   };
 
-  const handleToggleSleeves = (sleeve: string) => {
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev);
-      const current = next.get('sleeves') ? next.get('sleeves')!.split(',') : [];
-      const updated = current.includes(sleeve)
-        ? current.filter((s) => s !== sleeve)
-        : [...current, sleeve];
 
-      if (updated.length > 0) {
-        next.set('sleeves', updated.join(','));
-      } else {
-        next.delete('sleeves');
-      }
-      return next;
-    }, { replace: true });
-  };
 
   const handleClearSizes = () => {
     setSearchParams((prev) => {
@@ -327,13 +366,7 @@ const ProductsPage: React.FC = () => {
     }, { replace: true });
   };
 
-  const handleClearSleeves = () => {
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev);
-      next.delete('sleeves');
-      return next;
-    }, { replace: true });
-  };
+
 
   const handleClearAllFilters = () => {
     setSearchInput('');
@@ -410,7 +443,7 @@ const ProductsPage: React.FC = () => {
             </div>
 
             {/* Active Filters Summary if any */}
-            {(selectedSizes.length > 0 || selectedColors.length > 0 || selectedFabrics.length > 0 || selectedSleeves.length > 0 || minPriceParam || maxPriceParam || searchParam) && (
+            {(selectedSizes.length > 0 || selectedColors.length > 0 || selectedFabrics.length > 0 || minPriceParam || maxPriceParam || searchParam) && (
               <div className="mb-6">
                 <div className="flex justify-between items-center mb-3">
                   <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Active Filters</span>
@@ -455,12 +488,7 @@ const ProductsPage: React.FC = () => {
                       <button onClick={() => handleToggleFabric(f)} className="ml-1.5 text-gray-400 hover:text-black">×</button>
                     </span>
                   ))}
-                  {selectedSleeves.map(sl => (
-                    <span key={sl} className="inline-flex items-center bg-gray-100 text-[10px] font-bold uppercase tracking-wider text-black px-2 py-1">
-                      Sleeves: {sl}
-                      <button onClick={() => handleToggleSleeves(sl)} className="ml-1.5 text-gray-400 hover:text-black">×</button>
-                    </span>
-                  ))}
+
                 </div>
               </div>
             )}
@@ -572,68 +600,34 @@ const ProductsPage: React.FC = () => {
                 </div>
               </button>
               {openSections.price && (
-                <div className="flex items-center space-x-2 mt-4">
+                <div className="mt-5 flex flex-col space-y-3">
+                  <div className="flex justify-between text-xs font-bold text-gray-500 uppercase tracking-wider">
+                    <span>Range</span>
+                    <span className="text-black font-semibold">
+                      ₹0 - ₹{Number(maxPriceInput || 10000).toLocaleString('en-IN')}{Number(maxPriceInput || 10000) >= 10000 ? '+' : ''}
+                    </span>
+                  </div>
                   <input
-                    type="number"
-                    placeholder="Min ₹"
-                    value={minPriceInput}
-                    onChange={(e) => setMinPriceInput(e.target.value)}
-                    className="w-full border border-gray-200 px-3 py-2 text-xs focus:outline-none focus:border-black rounded-none"
+                    type="range"
+                    min="0"
+                    max="10000"
+                    step="100"
+                    value={maxPriceInput || 10000}
+                    onChange={(e) => {
+                      setMinPriceInput('');
+                      setMaxPriceInput(e.target.value);
+                    }}
+                    className="w-full h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-black"
                   />
-                  <span className="text-gray-400 text-xs">-</span>
-                  <input
-                    type="number"
-                    placeholder="Max ₹"
-                    value={maxPriceInput}
-                    onChange={(e) => setMaxPriceInput(e.target.value)}
-                    className="w-full border border-gray-200 px-3 py-2 text-xs focus:outline-none focus:border-black rounded-none"
-                  />
+                  <div className="flex justify-between text-[10px] text-gray-400 font-medium">
+                    <span>₹0</span>
+                    <span>₹10,000+</span>
+                  </div>
                 </div>
               )}
             </div>
 
-            {/* Sleeves Accordion */}
-            <div className="border-b border-gray-200 py-5">
-              <button
-                onClick={() => toggleSection('sleeves')}
-                className="flex justify-between items-center w-full text-xs font-bold uppercase tracking-widest text-black hover:text-brand-accent transition-colors"
-              >
-                <span>Sleeves</span>
-                <div className="flex items-center space-x-2">
-                  {selectedSleeves.length > 0 && (
-                    <span
-                      onClick={(e) => { e.stopPropagation(); handleClearSleeves(); }}
-                      className="text-[10px] text-gray-400 hover:text-brand-accent lowercase font-bold mr-1"
-                    >
-                      clear
-                    </span>
-                  )}
-                  {openSections.sleeves ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                </div>
-              </button>
-              {openSections.sleeves && (
-                <ul className="space-y-3 mt-4">
-                  {['Short Sleeves', 'Long Sleeves', 'Sleeveless'].map((sleeve) => {
-                    const isSelected = selectedSleeves.includes(sleeve);
-                    return (
-                      <li key={sleeve}>
-                        <button
-                          onClick={() => handleToggleSleeves(sleeve)}
-                          className="flex items-center space-x-3 w-full group"
-                        >
-                          <div className={`w-4 h-4 border flex items-center justify-center transition-colors ${isSelected ? 'bg-black border-black' : 'border-gray-300 group-hover:border-black'}`}>
-                            {isSelected && <div className="w-2 h-2 bg-white" />}
-                          </div>
-                          <span className={`text-sm font-medium ${isSelected ? 'text-black font-bold' : 'text-gray-600 group-hover:text-black'}`}>
-                            {sleeve}
-                          </span>
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </div>
+
 
             {/* Size Accordion */}
             <div className="border-b border-gray-200 py-5">
@@ -776,11 +770,20 @@ const ProductsPage: React.FC = () => {
                 ))}
               </div>
             ) : products.length > 0 ? (
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-4 gap-y-10">
-                {products.map((product) => (
-                  <ProductCard key={product.id} product={product} />
-                ))}
-              </div>
+              <>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-4 gap-y-10">
+                  {products.map((product) => (
+                    <ProductCard key={product.id} product={product} />
+                  ))}
+                </div>
+
+                {/* Infinite Scroll Trigger Element */}
+                <div ref={observerRef} className="h-20 w-full flex items-center justify-center mt-8">
+                  {loadingMore && (
+                    <div className="w-8 h-8 border-4 border-gray-200 border-t-brand-accent rounded-full animate-spin"></div>
+                  )}
+                </div>
+              </>
             ) : (
               <div className="flex flex-col items-center justify-center py-32 px-4 text-center border border-dashed border-gray-200">
                 <SearchIcon size={48} className="text-gray-200 mb-6" strokeWidth={1} />

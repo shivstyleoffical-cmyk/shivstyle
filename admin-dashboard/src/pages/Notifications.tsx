@@ -120,14 +120,16 @@ const Notifications: React.FC = () => {
     },
     {
       title: 'Date',
-      dataIndex: 'created_at',
       key: 'date',
       width: 160,
-      render: (date: string) => (
-        <span className="text-sm text-gray-500">
-          {date ? format(new Date(date), 'MMM dd, HH:mm') : '-'}
-        </span>
-      ),
+      render: (_, record: Notification) => {
+        const date = record.created_at;
+        return (
+          <span className="text-sm text-gray-500">
+            {date ? format(new Date(date), 'MMM dd, HH:mm') : '-'}
+          </span>
+        );
+      },
     },
     {
       title: 'Actions',

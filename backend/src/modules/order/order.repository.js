@@ -67,10 +67,16 @@ class OrderRepository {
                 dateFilter = new Date(now.getFullYear(), now.getMonth(), 1);
         }
 
+        const whereClause = {
+            createdAt: { [Op.gte]: dateFilter },
+            [Op.not]: {
+                payment_type: { [Op.in]: ['upi', 'netbanking'] },
+                payment_status: 'not_paid'
+            }
+        };
+
         const breakdown = await Order.findAll({
-            where: {
-                createdAt: { [Op.gte]: dateFilter }
-            },
+            where: whereClause,
             attributes: [
                 'status',
                 'payment_status',
@@ -80,13 +86,9 @@ class OrderRepository {
             group: ['status', 'payment_status']
         });
 
-        const totalOrders = await this.count({
-            createdAt: { [Op.gte]: dateFilter }
-        });
+        const totalOrders = await this.count(whereClause);
 
-        const totalRevenue = await this.sum('net_amount', {
-            createdAt: { [Op.gte]: dateFilter }
-        });
+        const totalRevenue = await this.sum('net_amount', whereClause);
 
         return {
             period,

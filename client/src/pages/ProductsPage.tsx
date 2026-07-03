@@ -777,10 +777,18 @@ const ProductsPage: React.FC = () => {
                   ))}
                 </div>
 
-                {/* Infinite Scroll Trigger Element */}
-                <div ref={observerRef} className="h-20 w-full flex items-center justify-center mt-8">
+                {/* Infinite Scroll Trigger Element with Skeleton Row */}
+                <div ref={observerRef} className="w-full mt-10">
                   {loadingMore && (
-                    <div className="w-8 h-8 border-4 border-gray-200 border-t-brand-accent rounded-full animate-spin"></div>
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-4 gap-y-10 animate-pulse pb-10">
+                      {[...Array(4)].map((_, i) => (
+                        <div key={i} className="flex flex-col">
+                          <div className="bg-gray-100 aspect-[3/4] mb-3"></div>
+                          <div className="h-4 bg-gray-100 w-3/4 mb-2"></div>
+                          <div className="h-3 bg-gray-100 w-1/2"></div>
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </div>
               </>

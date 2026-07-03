@@ -70,10 +70,10 @@ const ProductDetailsPage: React.FC = () => {
   const [recommended, setRecommended] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
+
   // Gallery state
   const [activeImage, setActiveImage] = useState<string>('');
-  
+
   // Selector states
   const [selectedSize, setSelectedSize] = useState<string>('');
   const [selectedColor, setSelectedColor] = useState<string>('');
@@ -107,7 +107,7 @@ const ProductDetailsPage: React.FC = () => {
         const response = await fetchProductBySlug(slug);
         if (response.success && response.product) {
           const prod: Product = response.product;
-          
+
           // Combine prod.image_url and prod.images if they are different and image_url is not in images
           const allImages = prod.images ? [...prod.images] : [];
           if (prod.image_url && !allImages.some(img => img.image_url === prod.image_url)) {
@@ -119,9 +119,9 @@ const ProductDetailsPage: React.FC = () => {
             });
           }
           prod.images = allImages;
-          
+
           setProduct(prod);
-          
+
           // Set initial active image
           if (prod.images && prod.images.length > 0) {
             const primary = prod.images.find(img => img.is_primary);
@@ -163,15 +163,80 @@ const ProductDetailsPage: React.FC = () => {
     };
 
     loadProductData();
-    if (false as any) {
-      console.log(handleBuyItNow);
-    }
   }, [slug]);
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-white">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-black"></div>
+      <div className="min-h-screen bg-white">
+        {/* Breadcrumb skeleton */}
+        <div className="border-b border-gray-100 py-4">
+          <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex items-center space-x-2">
+              <div className="h-3 w-12 skeleton-shimmer rounded"></div>
+              <div className="h-3 w-4 skeleton-shimmer rounded"></div>
+              <div className="h-3 w-20 skeleton-shimmer rounded"></div>
+              <div className="h-3 w-4 skeleton-shimmer rounded"></div>
+              <div className="h-3 w-32 skeleton-shimmer rounded"></div>
+            </div>
+          </div>
+        </div>
+
+        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-10">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
+            {/* LEFT: Image Gallery Skeleton */}
+            <div className="lg:col-span-7 flex flex-col md:flex-row-reverse gap-4">
+              {/* Main Image */}
+              <div className="flex-1 aspect-[3/4] rounded-2xl skeleton-shimmer border border-zinc-100 shadow-sm"></div>
+              {/* Thumbnails */}
+              <div className="flex md:flex-col gap-2 flex-row">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="w-20 aspect-[3/4] rounded-lg skeleton-shimmer flex-shrink-0"></div>
+                ))}
+              </div>
+            </div>
+
+            {/* RIGHT: Product Info Skeleton */}
+            <div className="lg:col-span-5 flex flex-col justify-start space-y-6">
+              <div>
+                <div className="h-3 w-24 skeleton-shimmer rounded mb-3"></div>
+                <div className="h-7 w-3/4 skeleton-shimmer rounded mb-4"></div>
+                <div className="h-4 w-40 skeleton-shimmer rounded"></div>
+              </div>
+
+              <div className="border-y border-gray-100 py-5 space-y-2">
+                <div className="h-6 w-32 skeleton-shimmer rounded"></div>
+                <div className="h-3 w-48 skeleton-shimmer rounded"></div>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <div className="h-3 w-16 skeleton-shimmer rounded mb-3"></div>
+                  <div className="flex gap-2">
+                    <div className="h-10 w-24 rounded-full skeleton-shimmer"></div>
+                    <div className="h-10 w-24 rounded-full skeleton-shimmer"></div>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="h-3 w-16 skeleton-shimmer rounded mb-3"></div>
+                  <div className="flex gap-2">
+                    <div className="w-12 h-12 rounded-full skeleton-shimmer"></div>
+                    <div className="w-12 h-12 rounded-full skeleton-shimmer"></div>
+                    <div className="w-12 h-12 rounded-full skeleton-shimmer"></div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-3 pt-4">
+                <div className="flex gap-3">
+                  <div className="flex-grow h-14 rounded-full skeleton-shimmer"></div>
+                  <div className="w-14 h-14 rounded-full skeleton-shimmer"></div>
+                </div>
+                <div className="w-full h-14 rounded-full skeleton-shimmer"></div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -203,16 +268,16 @@ const ProductDetailsPage: React.FC = () => {
     }
   }
 
-  const isOnSale = product.is_on_sale || 
-                   (product.original_price && 
-                    !isNaN(Number(product.original_price)) && 
-                    Number(product.original_price) > displayPrice);
+  const isOnSale = product.is_on_sale ||
+    (product.original_price &&
+      !isNaN(Number(product.original_price)) &&
+      Number(product.original_price) > displayPrice);
 
   // Gather unique sizes and colors
-  const availableSizes = product.variants 
+  const availableSizes = product.variants
     ? Array.from(new Set(product.variants.map(v => v.size).filter(Boolean))) as string[]
     : [];
-  const availableColors = product.variants 
+  const availableColors = product.variants
     ? Array.from(new Set(product.variants.map(v => v.color).filter(Boolean))) as string[]
     : [];
 
@@ -384,7 +449,7 @@ const ProductDetailsPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-white">
-      <SEO 
+      <SEO
         title={product.product_name}
         description={product.description ? product.description.replace(/<[^>]*>/g, '').substring(0, 160) : `Buy ${product.product_name} at ShivStyle. Premium clothing crafted with standard quality.`}
         keywords={product.tags ? `${product.product_name}, ${product.tags}` : `${product.product_name}, premium clothing, fashion, shivstyle`}
@@ -413,21 +478,21 @@ const ProductDetailsPage: React.FC = () => {
 
       <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-10">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
-          
+
           {/* LEFT: Image Gallery */}
           <div className="lg:col-span-7 flex flex-col md:flex-row-reverse gap-4">
-            
+
             {/* Main Active Image */}
-            <div 
+            <div
               className="flex-1 aspect-[3/4] bg-gray-50 overflow-hidden relative group rounded-2xl border border-zinc-100 cursor-zoom-in shadow-sm"
               onMouseEnter={() => setIsZoomed(true)}
               onMouseLeave={() => setIsZoomed(false)}
               onMouseMove={handleMouseMove}
             >
               {activeImage ? (
-                <img 
-                  src={activeImage} 
-                  alt={product.product_name} 
+                <img
+                  src={activeImage}
+                  alt={product.product_name}
                   className="w-full h-full object-cover object-center transition-transform duration-150 ease-out"
                   style={{
                     transformOrigin: `${zoomPos.x}% ${zoomPos.y}%`,
@@ -450,9 +515,8 @@ const ProductDetailsPage: React.FC = () => {
                     <button
                       key={img.id}
                       onClick={() => setActiveImage(img.image_url)}
-                      className={`w-20 aspect-[3/4] flex-shrink-0 border-2 overflow-hidden bg-gray-50 rounded-lg transition-all ${
-                        activeImage === img.image_url ? 'border-black shadow-sm scale-95' : 'border-transparent hover:border-gray-300'
-                      }`}
+                      className={`w-20 aspect-[3/4] flex-shrink-0 border-2 overflow-hidden bg-gray-50 rounded-lg transition-all ${activeImage === img.image_url ? 'border-black shadow-sm scale-95' : 'border-transparent hover:border-gray-300'
+                        }`}
                     >
                       <img src={img.image_url} alt="" className="w-full h-full object-cover" />
                     </button>
@@ -464,7 +528,7 @@ const ProductDetailsPage: React.FC = () => {
 
           {/* RIGHT: Product Info & Configuration */}
           <div className="lg:col-span-5 flex flex-col justify-start">
-            
+
             {/* Badges */}
             {(product.is_new_arrival || product.is_trending || product.is_featured) && (
               <div className="flex flex-wrap gap-1.5 mb-3.5">
@@ -501,7 +565,7 @@ const ProductDetailsPage: React.FC = () => {
                   const starNumber = i + 1;
                   const isFilled = starNumber <= Math.floor(averageRating);
                   const isHalf = !isFilled && starNumber === Math.ceil(averageRating) && averageRating % 1 !== 0;
-                  
+
                   if (isFilled) {
                     return <Star key={i} size={14} className="fill-yellow-400 text-yellow-400" />;
                   } else if (isHalf) {
@@ -547,7 +611,7 @@ const ProductDetailsPage: React.FC = () => {
 
             {/* Configurations */}
             <div className="space-y-6 mb-8">
-              
+
               {/* Color Selectors */}
               {availableColors.length > 0 && (
                 <div>
@@ -562,11 +626,10 @@ const ProductDetailsPage: React.FC = () => {
                         <button
                           key={color}
                           onClick={() => setSelectedColor(color)}
-                          className={`text-xs font-bold uppercase tracking-wider px-5 py-2.5 border rounded-full transition-all duration-300 ${
-                            isSelected 
-                              ? 'border-black bg-black text-white shadow-md shadow-black/10' 
+                          className={`text-xs font-bold uppercase tracking-wider px-5 py-2.5 border rounded-full transition-all duration-300 ${isSelected
+                              ? 'border-black bg-black text-white shadow-md shadow-black/10'
                               : 'border-zinc-200 hover:border-black text-black hover:bg-zinc-50'
-                          }`}
+                            }`}
                         >
                           {color}
                         </button>
@@ -581,7 +644,7 @@ const ProductDetailsPage: React.FC = () => {
                 <div>
                   <div className="flex justify-between items-center mb-3">
                     <span className="text-xs font-bold uppercase tracking-wider text-black">Size</span>
-                    <button 
+                    <button
                       onClick={() => setIsSizeChartOpen(true)}
                       className="text-xs font-bold text-zinc-500 hover:text-black flex items-center space-x-1.5 transition-colors uppercase tracking-wider"
                     >
@@ -596,11 +659,10 @@ const ProductDetailsPage: React.FC = () => {
                         <button
                           key={size}
                           onClick={() => setSelectedSize(size)}
-                          className={`w-12 h-12 rounded-full text-xs font-bold uppercase tracking-wider border transition-all duration-300 flex items-center justify-center ${
-                            isSelected 
-                              ? 'border-black bg-black text-white shadow-md shadow-black/10 scale-105' 
+                          className={`w-12 h-12 rounded-full text-xs font-bold uppercase tracking-wider border transition-all duration-300 flex items-center justify-center ${isSelected
+                              ? 'border-black bg-black text-white shadow-md shadow-black/10 scale-105'
                               : 'border-zinc-200 hover:border-black text-black hover:bg-zinc-50'
-                          }`}
+                            }`}
                         >
                           {size}
                         </button>
@@ -614,14 +676,14 @@ const ProductDetailsPage: React.FC = () => {
               <div>
                 <span className="text-xs font-bold uppercase tracking-wider text-black block mb-3">Quantity</span>
                 <div className="flex items-center border border-zinc-200 rounded-full w-32 justify-between px-1.5 py-1">
-                  <button 
+                  <button
                     onClick={() => setQuantity(prev => Math.max(1, prev - 1))}
                     className="w-8 h-8 rounded-full flex items-center justify-center text-zinc-400 hover:text-black hover:bg-zinc-50 transition-colors"
                   >
                     <Minus size={12} />
                   </button>
                   <span className="text-xs font-bold text-black">{quantity}</span>
-                  <button 
+                  <button
                     onClick={() => setQuantity(prev => prev + 1)}
                     className="w-8 h-8 rounded-full flex items-center justify-center text-zinc-400 hover:text-black hover:bg-zinc-50 transition-colors"
                   >
@@ -635,7 +697,7 @@ const ProductDetailsPage: React.FC = () => {
             {/* CTAs */}
             <div className="flex flex-col gap-3 mb-8">
               <div className="flex gap-3">
-                <button 
+                <button
                   onClick={handleAddToBag}
                   className="flex-grow bg-transparent hover:bg-zinc-50 text-black border border-black transition-all duration-300 text-xs font-bold uppercase tracking-widest py-4 rounded-full flex items-center justify-center space-x-3"
                 >
@@ -646,18 +708,18 @@ const ProductDetailsPage: React.FC = () => {
                   <Heart size={18} />
                 </button>
               </div>
-              <button 
-                disabled
-                className="w-full bg-zinc-400 text-white cursor-not-allowed transition-all duration-300 text-xs font-bold uppercase tracking-widest py-4 rounded-full flex items-center justify-center shadow-lg"
+              <button
+                onClick={handleBuyItNow}
+                className="w-full bg-[#B91C1C] text-white hover:bg-[#A11717] transition-all duration-300 text-xs font-bold uppercase tracking-widest py-4 rounded-full flex items-center justify-center shadow-lg shadow-red-700/10"
               >
-                Website Under Development — Stay Tuned!
+                Buy It Now
               </button>
             </div>
 
             {/* Dynamic Specs Accordion */}
             <div className="border-t border-gray-100 pt-4 mt-2">
               <div className="border-b border-gray-100 pb-3">
-                <button 
+                <button
                   onClick={() => setActiveAccordion(activeAccordion === 'description' ? '' : 'description')}
                   className="w-full flex items-center justify-between text-[10px] font-extrabold uppercase tracking-widest text-black text-left py-2"
                 >
@@ -672,7 +734,7 @@ const ProductDetailsPage: React.FC = () => {
               </div>
 
               <div className="border-b border-gray-100 py-3">
-                <button 
+                <button
                   onClick={() => setActiveAccordion(activeAccordion === 'details' ? '' : 'details')}
                   className="w-full flex items-center justify-between text-[10px] font-extrabold uppercase tracking-widest text-black text-left py-1"
                 >
@@ -710,7 +772,7 @@ const ProductDetailsPage: React.FC = () => {
             {product.tags && (
               <div className="flex flex-wrap gap-1.5 mt-6 border-t border-zinc-100 pt-4">
                 {product.tags.split(',').map((tag: string) => (
-                  <span 
+                  <span
                     key={tag}
                     className="text-[9px] font-bold uppercase tracking-wider text-zinc-500 bg-zinc-50 px-2.5 py-1 rounded-full border border-zinc-100"
                   >
@@ -743,7 +805,7 @@ const ProductDetailsPage: React.FC = () => {
       {isSizeChartOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm transition-all duration-300">
           <div className="bg-white max-w-lg w-full mx-4 p-8 rounded-2xl border border-zinc-100 shadow-2xl relative animate-in fade-in zoom-in duration-200">
-            <button 
+            <button
               onClick={() => setIsSizeChartOpen(false)}
               className="absolute top-4 right-4 text-zinc-400 hover:text-black p-2 transition-colors"
             >
@@ -751,7 +813,7 @@ const ProductDetailsPage: React.FC = () => {
             </button>
             <h3 className="text-lg font-bold uppercase tracking-wider text-black mb-1">Size Guide</h3>
             <p className="text-xs text-zinc-500 mb-6 font-medium">Standard measurements in inches. Fit may vary depending on style and fabric.</p>
-            
+
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
@@ -796,11 +858,11 @@ const ProductDetailsPage: React.FC = () => {
                 </tbody>
               </table>
             </div>
-            
+
             <div className="mt-6 bg-zinc-50 p-4 rounded-xl border border-zinc-100">
               <h4 className="text-[10px] font-bold uppercase tracking-wider text-black mb-1">How to Measure</h4>
               <p className="text-[11px] text-zinc-500 leading-relaxed font-medium">
-                <strong>Chest:</strong> Measure around the fullest part of your chest, keeping the tape horizontal.<br/>
+                <strong>Chest:</strong> Measure around the fullest part of your chest, keeping the tape horizontal.<br />
                 <strong>Waist:</strong> Measure around your natural waistline, where your belt usually sits.
               </p>
             </div>

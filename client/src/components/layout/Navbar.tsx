@@ -74,8 +74,8 @@ const Navbar: React.FC = () => {
       try {
         const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
         const cachedCats = sessionStorage.getItem('categories_cache');
-        const cachedAt   = sessionStorage.getItem('categories_cache_ts');
-        const isFresh    = cachedCats && cachedAt && (Date.now() - Number(cachedAt)) < CACHE_TTL;
+        const cachedAt = sessionStorage.getItem('categories_cache_ts');
+        const isFresh = cachedCats && cachedAt && (Date.now() - Number(cachedAt)) < CACHE_TTL;
 
         if (isFresh) {
           setCategories(JSON.parse(cachedCats!));
@@ -85,7 +85,7 @@ const Navbar: React.FC = () => {
         const catData = await fetchCategories();
         const categoriesList = catData.categories || [];
         setCategories(categoriesList);
-        sessionStorage.setItem('categories_cache',    JSON.stringify(categoriesList));
+        sessionStorage.setItem('categories_cache', JSON.stringify(categoriesList));
         sessionStorage.setItem('categories_cache_ts', Date.now().toString());
       } catch (error) {
         console.error("Failed to load categories in navbar:", error);
@@ -100,9 +100,6 @@ const Navbar: React.FC = () => {
       } catch (e) {
         console.error("Failed to load recent searches:", e);
       }
-    }
-    if (false as any) {
-      console.log(api, loadRazorpayScript, clearCart);
     }
   }, []);
 
@@ -232,7 +229,7 @@ const Navbar: React.FC = () => {
 
             {/* Mobile menu button & Search (Left side on mobile) */}
             <div className="flex items-center space-x-4 md:hidden flex-1">
-              <button 
+              <button
                 onClick={() => setIsMobileMenuOpen(true)}
                 className="text-black hover:text-brand-accent transition-colors p-1"
               >
@@ -346,7 +343,7 @@ const Navbar: React.FC = () => {
                 <Package size={20} strokeWidth={1.5} />
                 <span className="hidden lg:block text-[11px] font-bold uppercase tracking-widest">Track</span>
               </Link>
-              <button 
+              <button
                 onClick={() => setIsCartOpen(true)}
                 className="text-black hover:text-brand-accent transition-colors relative flex items-center space-x-2"
               >
@@ -398,7 +395,7 @@ const Navbar: React.FC = () => {
               {isSearchOpen && (
                 <div className="absolute top-[80px] left-0 right-0 bg-white/95 backdrop-blur-md border-t border-zinc-100 shadow-2xl z-50 overflow-y-auto max-h-[80vh] transition-all duration-300 transform rounded-b-xl">
                   <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                    
+
                     {/* CASE 1: Empty or short query - show Popular & Recent searches */}
                     {searchQuery.trim().length < 2 ? (
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
@@ -409,7 +406,7 @@ const Navbar: React.FC = () => {
                               Recent Searches
                             </h4>
                             {recentSearches.length > 0 && (
-                              <button 
+                              <button
                                 type="button"
                                 onClick={clearRecentSearches}
                                 className="text-[9px] font-bold text-zinc-400 hover:text-brand-accent transition-colors uppercase tracking-widest"
@@ -488,7 +485,7 @@ const Navbar: React.FC = () => {
                         </div>
                       </div>
                     ) : (
-                      
+
                       // CASE 2: Active Search - show suggestions & matches
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
                         {/* Auto-suggest list */}
@@ -552,15 +549,15 @@ const Navbar: React.FC = () => {
                                   const isOnSale = product.is_on_sale || (originalPrice && originalPrice > displayPrice);
 
                                   return (
-                                    <div 
+                                    <div
                                       key={product.id}
                                       onClick={() => handleProductClick(product.url_slug, product.product_name)}
                                       className="flex items-center gap-3.5 p-2 bg-white hover:bg-zinc-50 border border-zinc-100 rounded-none cursor-pointer transition-all duration-200 group"
                                     >
                                       <div className="w-12 h-16 bg-zinc-100 overflow-hidden flex-shrink-0">
                                         {product.image_url ? (
-                                          <img 
-                                            src={product.image_url} 
+                                          <img
+                                            src={product.image_url}
                                             alt={product.product_name}
                                             className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-102"
                                           />
@@ -619,15 +616,15 @@ const Navbar: React.FC = () => {
           <div className="absolute inset-0 bg-black/50 backdrop-blur-xs transition-opacity duration-300" onClick={() => setIsCartOpen(false)} />
           <div className="absolute inset-y-0 right-0 max-w-full flex pl-10">
             <div className="w-screen max-w-md transform transition-all duration-300 ease-in-out bg-white shadow-2xl flex flex-col h-full">
-              
+
               {/* Drawer Header */}
               <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between">
                 <h2 className="text-sm font-bold uppercase tracking-widest text-black flex items-center gap-2">
                   <span>Shopping Bag</span>
                   <span className="text-xs bg-gray-100 text-gray-500 font-semibold px-2 py-0.5 rounded-full">{cartCount}</span>
                 </h2>
-                <button 
-                  onClick={() => setIsCartOpen(false)} 
+                <button
+                  onClick={() => setIsCartOpen(false)}
                   className="text-gray-400 hover:text-black transition-colors p-1"
                 >
                   <X size={20} strokeWidth={1.5} />
@@ -642,7 +639,7 @@ const Navbar: React.FC = () => {
                       <ShoppingBag size={24} className="text-gray-300" strokeWidth={1} />
                     </div>
                     <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-4">Your bag is empty</p>
-                    <button 
+                    <button
                       onClick={() => setIsCartOpen(false)}
                       className="border border-black text-black hover:bg-black hover:text-white transition-all text-[10px] font-bold uppercase tracking-widest px-6 py-3"
                     >
@@ -653,25 +650,25 @@ const Navbar: React.FC = () => {
                   cartItems.map((item, idx) => (
                     <div key={`${item.id}-${item.size || ''}-${item.color || ''}-${idx}`} className="flex gap-4 border-b border-gray-50 pb-6">
                       <div className="w-20 aspect-[3/4] bg-gray-50 overflow-hidden flex-shrink-0">
-                        <img 
-                          src={item.image_url} 
-                          alt={item.product_name} 
+                        <img
+                          src={item.image_url}
+                          alt={item.product_name}
                           className="w-full h-full object-cover object-center"
                         />
                       </div>
-                      
+
                       <div className="flex-1 flex flex-col justify-between">
                         <div>
                           <div className="flex justify-between items-start">
                             <h3 className="text-xs font-bold text-gray-900 uppercase tracking-wide line-clamp-1">{item.product_name}</h3>
-                            <button 
+                            <button
                               onClick={() => removeFromCart(item.id, item.size, item.color)}
                               className="text-gray-400 hover:text-brand-accent p-0.5 transition-colors"
                             >
                               <Trash2 size={14} />
                             </button>
                           </div>
-                          
+
                           {/* Selected Variant Options */}
                           <div className="flex gap-2 mt-1.5 flex-wrap">
                             {item.size && (
@@ -690,7 +687,7 @@ const Navbar: React.FC = () => {
                         <div className="flex items-center justify-between mt-4">
                           {/* Quantity Controls */}
                           <div className="flex items-center border border-gray-200">
-                            <button 
+                            <button
                               onClick={() => updateQuantity(item.id, item.quantity - 1, item.size, item.color)}
                               className="px-2 py-1 text-gray-400 hover:text-black transition-colors"
                             >
@@ -699,7 +696,7 @@ const Navbar: React.FC = () => {
                             <span className="px-2.5 text-xs font-bold text-black min-w-[20px] text-center select-none">
                               {item.quantity}
                             </span>
-                            <button 
+                            <button
                               onClick={() => updateQuantity(item.id, item.quantity + 1, item.size, item.color)}
                               className="px-2 py-1 text-gray-400 hover:text-black transition-colors"
                             >
@@ -727,13 +724,112 @@ const Navbar: React.FC = () => {
                   </div>
                   <p className="text-[10px] text-gray-400">Shipping and taxes calculated at checkout.</p>
                   <div className="grid gap-2">
-                    <button 
-                      disabled
-                      className="w-full bg-zinc-300 text-zinc-500 cursor-not-allowed transition-all text-[10px] font-bold uppercase tracking-widest py-4 text-center"
+                    <button
+                      onClick={async () => {
+                        try {
+                          setIsCartOpen(false);
+                          const response = await api.post('/checkout/initiate', {
+                            items: cartItems.map(item => ({
+                              id: item.id,
+                              variantId: item.variantId,
+                              quantity: item.quantity
+                            }))
+                          });
+                          if (response.data.success) {
+                            const data = response.data;
+                            const loaded = await loadRazorpayScript();
+                            if (!loaded) {
+                              alert("Failed to load secure checkout script.");
+                              return;
+                            }
+
+                            const options = {
+                              key: data.key,
+                              amount: data.amount,
+                              currency: data.currency || 'INR',
+                              name: 'ShivStyle Checkout',
+                              description: `Order ${data.orderNumber}`,
+                              order_id: data.razorpayOrderId,
+                              one_click_checkout: true, // Enables Magic Checkout
+                              show_address: true, // Asks for address inside Magic Checkout modal
+                              handler: async (paymentRes: any) => {
+                                try {
+                                  const verifyRes = await api.post('/checkout/verify', {
+                                    orderId: data.orderId,
+                                    razorpayPaymentId: paymentRes.razorpay_payment_id,
+                                    razorpayOrderId: paymentRes.razorpay_order_id,
+                                    razorpaySignature: paymentRes.razorpay_signature
+                                  });
+                                  if (verifyRes.data.success) {
+                                    clearCart();
+                                    navigate(`/order-success?orderId=${data.orderId}&orderNumber=${data.orderNumber}&method=online`);
+                                  } else {
+                                    alert('Payment verification failed.');
+                                  }
+                                } catch (err: any) {
+                                  console.error("Signature verification error:", err);
+                                  alert(err.response?.data?.message || 'Verification request failed');
+                                }
+                              },
+                              prefill: {
+                                name: '',
+                                email: '',
+                                contact: ''
+                              },
+                              theme: {
+                                color: '#10B981' // Green theme matching Magic Checkout
+                              },
+                              modal: {
+                                ondismiss: async () => {
+                                  console.log("Checkout modal dismissed.");
+                                  try {
+                                    await api.post('/checkout/cancel', { orderId: data.orderId });
+                                    console.log("Checkout cancelled and stock restored successfully.");
+                                  } catch (cancelErr) {
+                                    console.error("Error cancelling checkout:", cancelErr);
+                                  }
+                                }
+                              }
+                            };
+
+                            if (data.isMock) {
+                              console.log("Mock key detected. Simulating checkout verification...");
+                              setTimeout(async () => {
+                                try {
+                                  const verifyRes = await api.post('/checkout/verify', {
+                                    orderId: data.orderId,
+                                    razorpayPaymentId: 'pay_mock_' + Math.random().toString(36).substring(2, 12),
+                                    razorpayOrderId: data.razorpayOrderId,
+                                    razorpaySignature: 'mock_signature_hash'
+                                  });
+                                  if (verifyRes.data.success) {
+                                    clearCart();
+                                    navigate(`/order-success?orderId=${data.orderId}&orderNumber=${data.orderNumber}&method=online&mock=true`);
+                                  } else {
+                                    alert('Sandbox verification failed.');
+                                  }
+                                } catch (err: any) {
+                                  console.error("Mock verify error:", err);
+                                  alert('Sandbox verification failed.');
+                                }
+                              }, 1500);
+                            } else {
+                              const rzp = new (window as any).Razorpay(options);
+                              rzp.open();
+                            }
+                          } else {
+                            alert('Checkout service temporarily unavailable');
+                          }
+                        } catch (err) {
+                          console.error("Cart checkout trigger failed:", err);
+                          alert('Failed to connect to checkout gateway');
+                        }
+                      }}
+                      className="w-full bg-black text-white hover:bg-zinc-800 transition-all text-[11px] font-bold uppercase tracking-widest py-4 text-center"
                     >
-                      Under Development
+                      Proceed to Checkout
                     </button>
-                    <button 
+                    <button
                       onClick={() => setIsCartOpen(false)}
                       className="w-full bg-transparent hover:bg-gray-100 text-black border border-black/10 transition-all text-[10px] font-bold uppercase tracking-widest py-3 text-center"
                     >
@@ -754,12 +850,12 @@ const Navbar: React.FC = () => {
           <div className="absolute inset-0 bg-black/50 backdrop-blur-xs transition-opacity duration-300" onClick={() => setIsMobileMenuOpen(false)} />
           <div className="absolute inset-y-0 left-0 max-w-full flex pr-10">
             <div className="w-screen max-w-xs transform transition-all duration-300 ease-in-out bg-white shadow-2xl flex flex-col h-full">
-              
+
               {/* Header */}
               <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between">
                 <span className="text-xs font-extrabold uppercase tracking-widest text-black">Menu</span>
-                <button 
-                  onClick={() => setIsMobileMenuOpen(false)} 
+                <button
+                  onClick={() => setIsMobileMenuOpen(false)}
                   className="text-gray-400 hover:text-black transition-colors p-1"
                 >
                   <X size={20} strokeWidth={1.5} />

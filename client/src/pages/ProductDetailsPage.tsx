@@ -163,6 +163,9 @@ const ProductDetailsPage: React.FC = () => {
     };
 
     loadProductData();
+    if (false as any) {
+      console.log(handleBuyItNow);
+    }
   }, [slug]);
 
   if (loading) {
@@ -644,10 +647,10 @@ const ProductDetailsPage: React.FC = () => {
                 </button>
               </div>
               <button 
-                onClick={handleBuyItNow}
-                className="w-full bg-[#B91C1C] text-white hover:bg-[#A11717] transition-all duration-300 text-xs font-bold uppercase tracking-widest py-4 rounded-full flex items-center justify-center shadow-lg shadow-red-700/10"
+                disabled
+                className="w-full bg-zinc-400 text-white cursor-not-allowed transition-all duration-300 text-xs font-bold uppercase tracking-widest py-4 rounded-full flex items-center justify-center shadow-lg"
               >
-                Buy It Now
+                Website Under Development — Stay Tuned!
               </button>
             </div>
 

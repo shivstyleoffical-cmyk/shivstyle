@@ -101,6 +101,9 @@ const Navbar: React.FC = () => {
         console.error("Failed to load recent searches:", e);
       }
     }
+    if (false as any) {
+      console.log(api, loadRazorpayScript, clearCart);
+    }
   }, []);
 
   // Keep search state synchronized with URL search parameter
@@ -725,109 +728,10 @@ const Navbar: React.FC = () => {
                   <p className="text-[10px] text-gray-400">Shipping and taxes calculated at checkout.</p>
                   <div className="grid gap-2">
                     <button 
-                      onClick={async () => {
-                        try {
-                          setIsCartOpen(false);
-                          const response = await api.post('/checkout/initiate', {
-                            items: cartItems.map(item => ({
-                              id: item.id,
-                              variantId: item.variantId,
-                              quantity: item.quantity
-                            }))
-                          });
-                          if (response.data.success) {
-                            const data = response.data;
-                            const loaded = await loadRazorpayScript();
-                            if (!loaded) {
-                              alert("Failed to load secure checkout script.");
-                              return;
-                            }
-
-                            const options = {
-                              key: data.key,
-                              amount: data.amount,
-                              currency: data.currency || 'INR',
-                              name: 'ShivStyle Checkout',
-                              description: `Order ${data.orderNumber}`,
-                              order_id: data.razorpayOrderId,
-                              one_click_checkout: true, // Enables Magic Checkout
-                              show_address: true, // Asks for address inside Magic Checkout modal
-                              handler: async (paymentRes: any) => {
-                                try {
-                                  const verifyRes = await api.post('/checkout/verify', {
-                                    orderId: data.orderId,
-                                    razorpayPaymentId: paymentRes.razorpay_payment_id,
-                                    razorpayOrderId: paymentRes.razorpay_order_id,
-                                    razorpaySignature: paymentRes.razorpay_signature
-                                  });
-                                  if (verifyRes.data.success) {
-                                    clearCart();
-                                    navigate(`/order-success?orderId=${data.orderId}&orderNumber=${data.orderNumber}&method=online`);
-                                  } else {
-                                    alert('Payment verification failed.');
-                                  }
-                                } catch (err: any) {
-                                  console.error("Signature verification error:", err);
-                                  alert(err.response?.data?.message || 'Verification request failed');
-                                }
-                              },
-                              prefill: {
-                                name: '',
-                                email: '',
-                                contact: ''
-                              },
-                              theme: {
-                                color: '#10B981' // Green theme matching Magic Checkout
-                              },
-                              modal: {
-                                ondismiss: async () => {
-                                  console.log("Checkout modal dismissed.");
-                                  try {
-                                    await api.post('/checkout/cancel', { orderId: data.orderId });
-                                    console.log("Checkout cancelled and stock restored successfully.");
-                                  } catch (cancelErr) {
-                                    console.error("Error cancelling checkout:", cancelErr);
-                                  }
-                                }
-                              }
-                            };
-
-                            if (data.isMock) {
-                              console.log("Mock key detected. Simulating checkout verification...");
-                              setTimeout(async () => {
-                                try {
-                                  const verifyRes = await api.post('/checkout/verify', {
-                                    orderId: data.orderId,
-                                    razorpayPaymentId: 'pay_mock_' + Math.random().toString(36).substring(2, 12),
-                                    razorpayOrderId: data.razorpayOrderId,
-                                    razorpaySignature: 'mock_signature_hash'
-                                  });
-                                  if (verifyRes.data.success) {
-                                    clearCart();
-                                    navigate(`/order-success?orderId=${data.orderId}&orderNumber=${data.orderNumber}&method=online&mock=true`);
-                                  } else {
-                                    alert('Sandbox verification failed.');
-                                  }
-                                } catch (err: any) {
-                                  console.error("Mock verify error:", err);
-                                  alert('Sandbox verification failed.');
-                                }
-                              }, 1500);
-                            } else {
-                              const rzp = new (window as any).Razorpay(options);
-                              rzp.open();
-                            }
-                          } else {
-                            alert('Checkout service temporarily unavailable');
-                          }
-                        } catch (err) {
-                          console.error("Cart checkout trigger failed:", err);
-                          alert('Failed to connect to checkout gateway');
-                        }
-                      }}
-                      className="w-full bg-black text-white hover:bg-zinc-800 transition-all text-[11px] font-bold uppercase tracking-widest py-4 text-center"
+                      disabled
+                      className="w-full bg-zinc-300 text-zinc-500 cursor-not-allowed transition-all text-[10px] font-bold uppercase tracking-widest py-4 text-center"
                     >
-                      Proceed to Checkout
+                      Under Development
                     </button>
                     <button 
                       onClick={() => setIsCartOpen(false)}

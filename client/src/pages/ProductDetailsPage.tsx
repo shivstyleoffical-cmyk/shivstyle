@@ -369,7 +369,7 @@ const ProductDetailsPage: React.FC = () => {
             contact: ''
           },
           theme: {
-            color: '#10B981'
+            color: '#000000'
           },
           modal: {
             ondismiss: async () => {

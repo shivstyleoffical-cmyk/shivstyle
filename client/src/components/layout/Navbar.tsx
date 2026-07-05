@@ -777,7 +777,7 @@ const Navbar: React.FC = () => {
                                 contact: ''
                               },
                               theme: {
-                                color: '#10B981' // Green theme matching Magic Checkout
+                                color: '#000000' // Premium black theme matching ShivStyle branding
                               },
                               modal: {
                                 ondismiss: async () => {

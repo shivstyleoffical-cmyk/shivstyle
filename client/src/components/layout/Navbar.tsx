@@ -338,7 +338,7 @@ const Navbar: React.FC = () => {
               <Link
                 to="/track-order"
                 title="Track My Order"
-                className="hidden md:flex items-center gap-1.5 text-black hover:text-brand-accent transition-colors"
+                className="flex items-center gap-1.5 text-black hover:text-brand-accent transition-colors"
               >
                 <Package size={20} strokeWidth={1.5} />
                 <span className="hidden lg:block text-[11px] font-bold uppercase tracking-widest">Track</span>

@@ -21,6 +21,9 @@ router.post('/verify', checkoutController.verifyPayment);
 // Public webhook endpoint for payment captures from Razorpay
 router.post('/webhook', checkoutController.handleWebhook);
 
+// Public webhook endpoint for shipment tracking updates from Shiprocket
+router.post('/delivery-webhook', checkoutController.handleShiprocketWebhook);
+
 // Magic Checkout specific endpoints called by Razorpay servers
 router.post('/shipping-info', checkoutController.getMagicShippingInfo);
 router.get('/shipping-info', checkoutController.getMagicShippingInfo);

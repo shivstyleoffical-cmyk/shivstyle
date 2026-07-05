@@ -29,4 +29,24 @@ export const orderService = {
   bulkDelete: async (ids: string[]): Promise<void> => {
     await api.delete('/orders/admin/orders/bulk', { data: { ids } });
   },
+
+  bookShipment: async (id: string, packageDetails?: any): Promise<any> => {
+    const response = await api.post(`/orders/admin/${id}/book-shipment`, packageDetails);
+    return response.data;
+  },
+
+  getShippingRates: async (id: string, packageDetails: any): Promise<any> => {
+    const response = await api.post(`/orders/admin/${id}/shipping-rates`, packageDetails);
+    return response.data;
+  },
+
+  getPickupLocations: async (): Promise<any> => {
+    const response = await api.get('/orders/admin/shiprocket/pickup-locations');
+    return response.data;
+  },
+
+  updateShippingAddress: async (id: string, addressData: any): Promise<any> => {
+    const response = await api.put(`/orders/admin/${id}/shipping-address`, addressData);
+    return response.data;
+  },
 };

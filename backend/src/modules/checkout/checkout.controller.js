@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import Razorpay from 'razorpay';
 import crypto from 'crypto';
+import config from '../../config/config.js';
 import { Op } from 'sequelize';
 import User from '../user/user.model.js';
 import Role from '../user/role.model.js';
@@ -13,6 +14,8 @@ import Product from '../product/product.model.js';
 import shiprocketService from '../../integrations/delivery/shiprocket.service.js';
 import Offer from '../offer/offer.model.js';
 import OfferService from '../offer/offer.service.js';
+import mailer from '../../integrations/email/email.service.js';
+import { Order_Placed_Email_Template, Order_Shipped_Email_Template } from '../../integrations/email/email.templates.js';
 
 // Initialize Razorpay
 const razorpay = new Razorpay({
@@ -45,7 +48,7 @@ const logToDb = async (endpoint, method, headers, body, response) => {
 /**
  * Helper to book Shiprocket shipment for an order
  */
-const bookShipment = async (orderId) => {
+export const bookShipment = async (orderId, packageOverrides = {}) => {
     try {
         const order = await Order.findByPk(orderId, {
             include: [
@@ -60,6 +63,7 @@ const bookShipment = async (orderId) => {
             return null;
         }
 
+        const { weight = 0.5, length = 15, breadth = 15, height = 10, pickupLocation = 'Primary' } = packageOverrides;
         const orderDate = new Date(order.createdAt || Date.now()).toISOString().split('T')[0];
         const shippingAddress = order.shippingAddress;
 
@@ -73,7 +77,7 @@ const bookShipment = async (orderId) => {
                 price: parseFloat(item.price),
                 sku: item.product_variant_id || item.product_id
             })),
-            pickupAddress: { locationName: 'Primary' },
+            pickupAddress: { locationName: pickupLocation },
             deliveryAddress: {
                 name: shippingAddress.full_name || 'Customer',
                 address: `${shippingAddress.address_line1} ${shippingAddress.address_line2 || ''}`.trim(),
@@ -82,10 +86,14 @@ const bookShipment = async (orderId) => {
                 state: shippingAddress.state,
                 country: shippingAddress.country || 'India',
                 email: order.user?.email || 'guest@shivstyle.com',
-                phone: shippingAddress.phone || order.user?.phone || '9999999999'
+                phone: (shippingAddress.phone || order.user?.phone || '9999999999').replace(/\D/g, '').slice(-10)
             },
-            weight: 0.5,
-            dimensions: { length: 15, breadth: 15, height: 10 },
+            weight: parseFloat(weight) || 0.5,
+            dimensions: {
+                length: parseInt(length) || 15,
+                breadth: parseInt(breadth) || 15,
+                height: parseInt(height) || 10
+            },
             paymentMethod: order.payment_type === 'cod' ? 'cod' : 'prepaid',
             subtotal: parseFloat(order.total_amount)
         };
@@ -97,6 +105,7 @@ const bookShipment = async (orderId) => {
             order.tracking_number = 'SR-MOCK-' + Math.floor(100000 + Math.random() * 900000);
             order.estimated_delivery_date = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000);
             await order.save();
+            sendOrderShippedEmail(order.id);
             return order;
         }
 
@@ -105,6 +114,8 @@ const bookShipment = async (orderId) => {
         order.tracking_number = result.awb || result.shipmentId;
         order.estimated_delivery_date = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000);
         await order.save();
+
+        sendOrderShippedEmail(order.id);
 
         console.log(`[Shiprocket] Shipment created successfully for ${order.order_number}: AWB ${order.tracking_number}`);
         return result;
@@ -140,6 +151,54 @@ const incrementCouponUsage = async (order) => {
         } catch (offerErr) {
             console.error("[Magic Checkout] Failed to increment coupon used_count:", offerErr);
         }
+    }
+};
+
+/**
+ * Send order confirmation email to customer
+ */
+export const sendOrderPlacedEmail = async (orderId) => {
+    try {
+        const order = await Order.findByPk(orderId, {
+            include: [{ model: User, as: 'user' }]
+        });
+        if (!order || !order.user || !order.user.email) return;
+
+        const html = Order_Placed_Email_Template
+            .replace('{name}', order.user.name || 'Customer')
+            .replace('{orderNumber}', order.order_number)
+            .replace('{netAmount}', `₹${parseFloat(order.net_amount).toFixed(2)}`)
+            .replace('{paymentType}', order.payment_type || 'prepaid')
+            .replace('{year}', String(new Date().getFullYear()));
+
+        await mailer.sendmail(order.user.email, `Order Confirmation - ${order.order_number}`, html);
+        console.log(`✉️ [Email] Order confirmation sent successfully to ${order.user.email} for order ${order.order_number}`);
+    } catch (err) {
+        console.error(`❌ [Email Error] Failed to send order placed email for order ${orderId}:`, err.message);
+    }
+};
+
+/**
+ * Send order shipped/tracking email to customer
+ */
+export const sendOrderShippedEmail = async (orderId) => {
+    try {
+        const order = await Order.findByPk(orderId, {
+            include: [{ model: User, as: 'user' }]
+        });
+        if (!order || !order.user || !order.user.email || !order.tracking_number) return;
+
+        const html = Order_Shipped_Email_Template
+            .replace('{name}', order.user.name || 'Customer')
+            .replace('{orderNumber}', order.order_number)
+            .replace('{courier}', order.delivery_partner || 'Shiprocket')
+            .replace(/{trackingNumber}/g, order.tracking_number)
+            .replace('{year}', String(new Date().getFullYear()));
+
+        await mailer.sendmail(order.user.email, `Your ShivStyle order ${order.order_number} has been shipped!`, html);
+        console.log(`✉️ [Email] Tracking details sent successfully to ${order.user.email} for order ${order.order_number}`);
+    } catch (err) {
+        console.error(`❌ [Email Error] Failed to send order shipped email for order ${orderId}:`, err.message);
     }
 };
 
@@ -385,8 +444,11 @@ export const completeCheckout = async (req, res, next) => {
             // Increment coupon usage
             await incrementCouponUsage(order);
 
-            // Book Shiprocket shipment
-            await bookShipment(order.id);
+            // Send order confirmation email (non-blocking)
+            sendOrderPlacedEmail(order.id);
+
+            // Book Shiprocket shipment (Disabled: Admin will proceed manually from dashboard)
+            // await bookShipment(order.id);
 
             return res.status(200).json({
                 success: true,
@@ -532,8 +594,11 @@ export const verifyPayment = async (req, res, next) => {
             // Increment coupon usage
             await incrementCouponUsage(order);
 
-            // Book Shiprocket shipment
-            await bookShipment(order.id);
+            // Send order confirmation email (non-blocking)
+            sendOrderPlacedEmail(order.id);
+
+            // Book Shiprocket shipment (Disabled: Admin will proceed manually from dashboard)
+            // await bookShipment(order.id);
 
             return res.status(200).json({
                 success: true,
@@ -706,8 +771,11 @@ export const verifyPayment = async (req, res, next) => {
             // Increment coupon usage
             await incrementCouponUsage(order);
 
-            // Book Shiprocket shipment
-            await bookShipment(order.id);
+            // Send order confirmation email (non-blocking)
+            sendOrderPlacedEmail(order.id);
+
+            // Book Shiprocket shipment (Disabled: Admin will proceed manually from dashboard)
+            // await bookShipment(order.id);
 
             return res.status(200).json({
                 success: true,
@@ -760,7 +828,8 @@ export const handleWebhook = async (req, res, next) => {
                 // Increment coupon usage
                 await incrementCouponUsage(order);
 
-                await bookShipment(order.id);
+                // Book Shiprocket shipment (Disabled: Admin will proceed manually from dashboard)
+                // await bookShipment(order.id);
                 console.log(`[Webhook] Order ${order.order_number} marked as Paid via Webhook.`);
             }
         }
@@ -792,7 +861,6 @@ export const handleWebhook = async (req, res, next) => {
  *     { id: "addr_001", serviceable: true, cod: true, cod_fee: 0, shipping_fee: 0 },
  *     { id: "addr_002", serviceable: true, cod: true, cod_fee: 0, shipping_fee: 0 }
  *   ]
- * }
  */
 export const getMagicShippingInfo = async (req, res, next) => {
     let responseData = null;
@@ -803,41 +871,91 @@ export const getMagicShippingInfo = async (req, res, next) => {
         const order_id = req.body.order_id || req.query.order_id;
         const razorpay_order_id = req.body.razorpay_order_id || req.query.razorpay_order_id;
         const addresses = req.body.addresses || req.query.addresses;
-        const customer = req.body.customer || req.query.customer;
 
         const lookupIds = [];
         if (razorpay_order_id) lookupIds.push(razorpay_order_id);
         if (order_id) lookupIds.push(order_id);
 
-        // Fetch shipping fee from order in database (which includes the shipping fee calculated during order creation)
-        let shippingFeeInPaise = 5000; // default to ₹50 (5000 paise)
+        let order = null;
         if (lookupIds.length > 0) {
-            const order = await Order.findOne({
+            order = await Order.findOne({
                 where: {
                     [Op.or]: [
                         { payment_transaction_id: { [Op.in]: lookupIds } },
                         { order_number: { [Op.in]: lookupIds } }
                     ]
-                }
+                },
+                include: [{ model: OrderItem, as: 'orderItems' }]
             });
-            if (order) {
-                shippingFeeInPaise = Math.round(parseFloat(order.shipping_amount || 0) * 100);
-                console.log(`[Magic Checkout] Found order for shipping lookups. Shipping fee: ₹${order.shipping_amount} (${shippingFeeInPaise} paise)`);
-            } else {
-                console.warn(`[Magic Checkout] Order not found for shipping lookup with IDs: ${lookupIds.join(', ')}`);
-            }
         }
 
-        // Razorpay sends 'addresses' as an array (not singular 'address')
-        // We must return serviceability mapped to each address by its id
+        const subtotal = order ? parseFloat(order.total_amount || 0) : 0;
+        const totalItemsCount = order?.orderItems?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 1;
+        const FREE_SHIPPING_THRESHOLD = 999;
+
+        // Function to resolve shipping fee for a single pincode
+        const resolveShippingFee = async (pincode) => {
+            // Free Shipping threshold
+            if (subtotal >= FREE_SHIPPING_THRESHOLD) {
+                console.log(`[Magic Checkout] Order subtotal (₹${subtotal}) >= ₹${FREE_SHIPPING_THRESHOLD}. Free Shipping applied.`);
+                return 0;
+            }
+
+            // Shiprocket calculation
+            if (process.env.SHIPROCKET_EMAIL && process.env.SHIPROCKET_EMAIL !== 'dummy@example.com') {
+                try {
+                    const weight = totalItemsCount * 0.3; // standard 300g per apparel item
+                    console.log(`[Magic Checkout] Querying Shiprocket rates: pickup=${process.env.STORE_PICKUP_PINCODE}, delivery=${pincode}, weight=${weight}kg`);
+
+                    const rates = await shiprocketService.getShippingRates({
+                        weight,
+                        pickupPincode: process.env.STORE_PICKUP_PINCODE || '734001',
+                        deliveryPincode: pincode
+                    });
+
+                    if (rates && rates.length > 0) {
+                        // Filter out zero/invalid rates and sort to find the cheapest
+                        const validRates = rates.filter(r => r.rate !== undefined && r.rate !== null).map(r => parseFloat(r.rate));
+                        if (validRates.length > 0) {
+                            const cheapestRate = Math.min(...validRates);
+                            console.log(`[Magic Checkout] Shiprocket returned ${rates.length} rates. Cheapest: ₹${cheapestRate}`);
+                            return cheapestRate;
+                        }
+                    }
+                } catch (shiprocketErr) {
+                    console.error("[Magic Checkout] Shiprocket rate API query failed, falling back to flat ₹50:", shiprocketErr.message);
+                }
+            } else {
+                console.log("[Magic Checkout] Shiprocket credentials dry or dummy. Falling back to flat ₹50.");
+            }
+
+            return 50; // Standard Flat Fallback (₹50)
+        };
+
         if (Array.isArray(addresses) && addresses.length > 0) {
-            const responseAddresses = addresses.map((addr, index) => ({
-                id: addr.id !== undefined && addr.id !== null ? addr.id : index,
-                serviceable: true,
-                cod: false,
-                cod_fee: 0,
-                shipping_fee: shippingFeeInPaise
-            }));
+            const responseAddresses = [];
+            for (let index = 0; index < addresses.length; index++) {
+                const addr = addresses[index];
+                const pincode = addr.zipcode || addr.postal_code || '110001';
+                const calculatedFee = await resolveShippingFee(pincode);
+                const calculatedFeeInPaise = Math.round(calculatedFee * 100);
+
+                // Update shipping amount in local database order representation so the invoice matches
+                if (order && index === 0) {
+                    order.shipping_amount = calculatedFee;
+                    order.net_amount = (parseFloat(order.total_amount || 0) - parseFloat(order.discount_amount || 0)) + calculatedFee;
+                    await order.save();
+                    console.log(`[Magic Checkout] Updated Order ${order.order_number} locally: Shipping=₹${calculatedFee}, Net=₹${order.net_amount}`);
+                }
+
+                responseAddresses.push({
+                    id: addr.id !== undefined && addr.id !== null ? addr.id : index,
+                    serviceable: true,
+                    cod: true,
+                    cod_fee: 0,
+                    shipping_fee: calculatedFeeInPaise
+                });
+            }
 
             responseData = { addresses: responseAddresses };
             console.log("SHIPPING INFO RESPONSE BODY:", responseData);
@@ -847,11 +965,13 @@ export const getMagicShippingInfo = async (req, res, next) => {
         }
 
         // Fallback: flat format for older Razorpay API versions
+        const defaultFee = await resolveShippingFee('110001');
+        const defaultFeeInPaise = Math.round(defaultFee * 100);
         responseData = {
             serviceable: true,
             cod: false,
             cod_fee: 0,
-            shipping_fee: shippingFeeInPaise
+            shipping_fee: defaultFeeInPaise
         };
         console.log("SHIPPING INFO RESPONSE BODY (flat fallback):", responseData);
         res.setHeader('Content-Type', 'application/json');
@@ -864,12 +984,11 @@ export const getMagicShippingInfo = async (req, res, next) => {
             serviceable: true,
             cod: false,
             cod_fee: 0,
-            shipping_fee: 5000
+            shipping_fee: 5000 // ₹50 fallback in case of server errors
         };
         console.log("SHIPPING INFO RESPONSE BODY (error fallback):", responseData);
         res.setHeader('Content-Type', 'application/json');
         await logToDb('/api/checkout/shipping-info', req.method, req.headers, req.body, responseData);
-        // Always return 200 — never let this endpoint fail with 5xx
         return res.status(200).json(responseData);
     }
 };
@@ -924,7 +1043,7 @@ export const applyMagicPromotion = async (req, res, next) => {
 
         const body = req.body || {};
         const query = req.query || {};
-        
+
         // Extract order ID with all possible keys (crucial for Razorpay custom integrations)
         const order_id = body.order_id || body.razorpay_order_id || body.reference_id || query.order_id || query.razorpay_order_id || query.reference_id;
 
@@ -1139,6 +1258,70 @@ export const cancelCheckout = async (req, res, next) => {
 
         return res.status(400).json({ success: false, message: 'Cannot cancel a paid or processed order' });
     } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Public Webhook endpoint for Shiprocket tracking status updates
+ */
+export const handleShiprocketWebhook = async (req, res, next) => {
+    try {
+        const { awb, current_status } = req.body;
+
+        console.log(`[Shiprocket Webhook Received] AWB: ${awb}, Status: ${current_status}`);
+
+        if (!awb || !current_status) {
+            return res.status(400).json({ success: false, message: 'Missing awb or current_status in body' });
+        }
+
+        // Find the order by tracking number
+        const order = await Order.findOne({
+            where: { tracking_number: awb }
+        });
+
+        if (!order) {
+            console.log(`[Shiprocket Webhook] No matching order found for AWB: ${awb}`);
+            return res.status(200).json({ success: true, message: 'Webhook received. AWB not found in our records.' });
+        }
+
+        const prevStatus = order.status;
+        const normalizedStatus = current_status.toString().toLowerCase().trim();
+
+        // Map Shiprocket status to local order status
+        if (normalizedStatus === 'delivered') {
+            order.status = 'delivered';
+
+            // If Cash on Delivery, mark the payment status as paid upon successful delivery!
+            if (order.payment_type === 'COD' || order.payment_type === 'cod') {
+                order.payment_status = 'paid';
+                console.log(`[Shiprocket Webhook] COD order ${order.order_number} marked as Paid upon delivery.`);
+            }
+        } else if (
+            normalizedStatus === 'cancelled' ||
+            normalizedStatus === 'rto_delivered' ||
+            normalizedStatus.includes('rto')
+        ) {
+            order.status = 'cancelled';
+        } else if (
+            normalizedStatus === 'shipped' ||
+            normalizedStatus === 'in-transit' ||
+            normalizedStatus === 'out_for_delivery' ||
+            normalizedStatus === 'reached_destination'
+        ) {
+            order.status = 'shipped';
+        }
+
+        if (order.status !== prevStatus || order.changed()) {
+            await order.save();
+            console.log(`[Shiprocket Webhook] Updated Order ${order.order_number} status from ${prevStatus} to ${order.status}`);
+        } else {
+            console.log(`[Shiprocket Webhook] Status for Order ${order.order_number} remains unchanged: ${order.status}`);
+        }
+
+        return res.status(200).json({ success: true, message: 'Webhook processed successfully' });
+    } catch (error) {
+        console.error('[Shiprocket Webhook Error]:', error.message);
         next(error);
     }
 };

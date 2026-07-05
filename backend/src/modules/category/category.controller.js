@@ -27,6 +27,7 @@ export const getAllCategories = async (req, res, next) => {
     try {
         const result = await categoryService.getAllCategories(req.query);
 
+        res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=30');
         return res.status(200).json({
             success: true,
             categories: result.categories,
@@ -102,6 +103,7 @@ export const getCategoryTree = async (req, res, next) => {
     try {
         const categoryTree = await categoryService.getCategoryTree();
 
+        res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=30');
         return res.status(200).json({
             success: true,
             categories: categoryTree

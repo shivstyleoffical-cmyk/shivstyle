@@ -13,7 +13,11 @@ import {
     updateDeliveryTracking,
     markAsDelivered,
     deleteOrder,
-    bulkDeleteOrders
+    bulkDeleteOrders,
+    manualBookShipment,
+    updateOrderShippingAddress,
+    getManualShippingRates,
+    getPickupLocationsList
 } from './order.controller.js';
 
 import { authMiddleware } from '../../middleware/authMiddleware.js';
@@ -47,6 +51,12 @@ orderRoutes.get('/admin/all', authMiddleware, adminOrSuperAdminMiddleware, getAl
 orderRoutes.get('/admin/statistics', authMiddleware, adminOrSuperAdminMiddleware, getOrderStatistics);
 orderRoutes.get('/admin/:id', authMiddleware, adminOrSuperAdminMiddleware, getOrderByIdAdmin);
 orderRoutes.put('/admin/:id/status', authMiddleware, adminOrSuperAdminMiddleware, validateUpdateOrderStatus, updateOrderStatus);
+
+// Admin Manual Shiprocket routes
+orderRoutes.post('/admin/:id/book-shipment', authMiddleware, adminOrSuperAdminMiddleware, manualBookShipment);
+orderRoutes.put('/admin/:id/shipping-address', authMiddleware, adminOrSuperAdminMiddleware, updateOrderShippingAddress);
+orderRoutes.post('/admin/:id/shipping-rates', authMiddleware, adminOrSuperAdminMiddleware, getManualShippingRates);
+orderRoutes.get('/admin/shiprocket/pickup-locations', authMiddleware, adminOrSuperAdminMiddleware, getPickupLocationsList);
 
 // Delivery tracking routes (optional - for future use)
 orderRoutes.put('/admin/:id/delivery-tracking', authMiddleware, adminOrSuperAdminMiddleware, updateDeliveryTracking);

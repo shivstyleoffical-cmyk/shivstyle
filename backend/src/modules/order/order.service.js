@@ -598,7 +598,12 @@ class OrderService {
         const normalizedIdentifier = identifier.toString().trim().toLowerCase();
 
         const order = await orderRepository.findOne(
-            { order_number: orderNumber },
+            {
+                [Op.or]: [
+                    { order_number: orderNumber },
+                    { tracking_number: orderNumber }
+                ]
+            },
             [
                 {
                     model: OrderItem,
@@ -672,6 +677,28 @@ class OrderService {
                 phone: maskedPhone
             }
         };
+    }
+
+    async updateShippingAddress(orderId, addressData) {
+        const address = await OrderShippingAddress.findOne({ where: { order_id: orderId } });
+        if (!address) {
+            const error = new Error('Shipping address not found');
+            error.statusCode = 404;
+            throw error;
+        }
+
+        const { full_name, address_line1, address_line2, city, state, postal_code, phone, country } = addressData;
+        address.full_name = full_name !== undefined ? full_name : address.full_name;
+        address.address_line1 = address_line1 !== undefined ? address_line1 : address.address_line1;
+        address.address_line2 = address_line2 !== undefined ? address_line2 : address.address_line2;
+        address.city = city !== undefined ? city : address.city;
+        address.state = state !== undefined ? state : address.state;
+        address.postal_code = postal_code !== undefined ? postal_code : address.postal_code;
+        address.phone = phone !== undefined ? phone : address.phone;
+        address.country = country !== undefined ? country : address.country;
+
+        await address.save();
+        return address;
     }
 
 }

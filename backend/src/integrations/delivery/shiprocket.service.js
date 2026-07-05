@@ -62,11 +62,16 @@ class ShiprocketService extends DeliveryService {
                 subtotal
             } = shipmentData;
 
+            const nameParts = (deliveryAddress.name || 'Customer Guest').trim().split(/\s+/);
+            const firstName = nameParts[0];
+            const lastName = nameParts.slice(1).join(' ') || 'Customer';
+
             const payload = {
                 order_id: orderId,
                 order_date: orderDate,
                 pickup_location: pickupAddress.locationName || 'Primary',
-                billing_customer_name: deliveryAddress.name,
+                billing_customer_name: firstName,
+                billing_last_name: lastName,
                 billing_address: deliveryAddress.address,
                 billing_city: deliveryAddress.city,
                 billing_pincode: deliveryAddress.pincode,
@@ -89,6 +94,8 @@ class ShiprocketService extends DeliveryService {
                 weight: weight
             };
 
+            console.log('[Shiprocket Payload]:', JSON.stringify(payload, null, 2));
+
             const response = await axios.post(
                 `${this.baseUrl}/orders/create/adhoc`,
                 payload,
@@ -103,6 +110,9 @@ class ShiprocketService extends DeliveryService {
                 courierName: response.data.courier_name
             };
         } catch (error) {
+            if (error.response?.data) {
+                console.error('[Shiprocket API Error Details]:', JSON.stringify(error.response.data, null, 2));
+            }
             throw new Error(`Shipment creation failed: ${error.response?.data?.message || error.message}`);
         }
     }
@@ -217,6 +227,35 @@ class ShiprocketService extends DeliveryService {
             };
         } catch (error) {
             throw new Error(`Pickup scheduling failed: ${error.response?.data?.message || error.message}`);
+        }
+    }
+
+    /**
+     * Get pickup locations from Shiprocket settings
+     */
+    async getPickupLocations() {
+        try {
+            const headers = await this.getHeaders();
+            const response = await axios.get(
+                `${this.baseUrl}/settings/company/pickup`,
+                { headers }
+            );
+            
+            const addresses = response.data?.data?.shipping_address;
+            if (!addresses || !Array.isArray(addresses)) {
+                return [];
+            }
+
+            return addresses.map(addr => ({
+                id: addr.id,
+                pickupLocation: addr.pickup_location,
+                pincode: addr.pin_code,
+                address: addr.address,
+                city: addr.city,
+                state: addr.state
+            }));
+        } catch (error) {
+            throw new Error(`Failed to fetch pickup locations: ${error.response?.data?.message || error.message}`);
         }
     }
 }

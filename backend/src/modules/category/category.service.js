@@ -2,6 +2,9 @@ import categoryRepository from './category.repository.js';
 import { uploadToCloudinary, deleteFromCloudinary, extractPublicIdFromUrl } from '../../integrations/storage/cloudinary.utils.js';
 import Product from '../product/product.model.js';
 
+// In-Memory cache for categories to achieve sub-millisecond response times
+const categoryCache = new Map();
+
 /**
  * CategoryService handles business logic for categories.
  * It does not know about Sequelize concepts (like Op or where clauses).
@@ -72,10 +75,16 @@ class CategoryService {
             }
         }
 
+        categoryCache.clear();
         return createdCategory;
     }
 
     async getAllCategories(queryParams) {
+        const cacheKey = `list_${JSON.stringify(queryParams)}`;
+        if (categoryCache.has(cacheKey)) {
+            return JSON.parse(JSON.stringify(categoryCache.get(cacheKey)));
+        }
+
         const {
             page = 1,
             limit = 20,
@@ -105,8 +114,9 @@ class CategoryService {
             sortOrder
         });
 
-        return {
-            categories: result.rows,
+        const serializedCategories = result.rows.map(r => r.toJSON ? r.toJSON() : r);
+        const cachedResult = {
+            categories: serializedCategories,
             pagination: {
                 total: result.count,
                 currentPage: parseInt(page),
@@ -116,26 +126,41 @@ class CategoryService {
                 limit: parseInt(limit)
             }
         };
+
+        categoryCache.set(cacheKey, cachedResult);
+        return JSON.parse(JSON.stringify(cachedResult));
     }
 
     async getCategoryById(id) {
+        const cacheKey = `id_${id}`;
+        if (categoryCache.has(cacheKey)) {
+            return JSON.parse(JSON.stringify(categoryCache.get(cacheKey)));
+        }
         const category = await categoryRepository.findById(id, { includeChildren: true, includeProducts: true });
         if (!category) {
             const error = new Error('Category not found');
             error.statusCode = 404;
             throw error;
         }
-        return category;
+        const plainCategory = category.toJSON ? category.toJSON() : category;
+        categoryCache.set(cacheKey, plainCategory);
+        return JSON.parse(JSON.stringify(plainCategory));
     }
 
     async getCategoryBySlug(slug) {
+        const cacheKey = `slug_${slug}`;
+        if (categoryCache.has(cacheKey)) {
+            return JSON.parse(JSON.stringify(categoryCache.get(cacheKey)));
+        }
         const category = await categoryRepository.findBySlugDetailed(slug);
         if (!category) {
             const error = new Error('Category not found');
             error.statusCode = 404;
             throw error;
         }
-        return category;
+        const plainCategory = category.toJSON ? category.toJSON() : category;
+        categoryCache.set(cacheKey, plainCategory);
+        return JSON.parse(JSON.stringify(plainCategory));
     }
 
     async updateCategory(id, data, file) {
@@ -218,6 +243,7 @@ class CategoryService {
             }
         }
 
+        categoryCache.clear();
         return updatedCategory;
     }
 
@@ -256,22 +282,29 @@ class CategoryService {
 
         await category.destroy();
 
+        categoryCache.clear();
         return true;
     }
 
     async getCategoryTree() {
+        const cacheKey = 'tree';
+        if (categoryCache.has(cacheKey)) {
+            return JSON.parse(JSON.stringify(categoryCache.get(cacheKey)));
+        }
         const categories = await categoryRepository.getFullTree();
 
         const buildTree = (items, parentId = null) => {
             return items
                 .filter(item => item.parent_cat_id === parentId)
                 .map(item => ({
-                    ...item.toJSON(),
+                    ...(item.toJSON ? item.toJSON() : item),
                     children: buildTree(items, item.id)
                 }));
         };
 
-        return buildTree(categories);
+        const tree = buildTree(categories);
+        categoryCache.set(cacheKey, tree);
+        return JSON.parse(JSON.stringify(tree));
     }
 }
 

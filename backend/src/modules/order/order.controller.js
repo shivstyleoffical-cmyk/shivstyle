@@ -1,5 +1,9 @@
 import { validationResult } from 'express-validator';
 import orderService from './order.service.js';
+import { bookShipment } from '../checkout/checkout.controller.js';
+import Order from './order.model.js';
+import OrderShippingAddress from './order-shipping-address.model.js';
+import shiprocketService from '../../integrations/delivery/shiprocket.service.js';
 
 export const trackOrder = async (req, res, next) => {
     try {
@@ -205,6 +209,94 @@ export const bulkDeleteOrders = async (req, res, next) => {
         });
     } catch (error) {
         next(error);
+    }
+};
+
+export const manualBookShipment = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        const { weight, length, breadth, height, pickupLocation } = req.body;
+        const result = await bookShipment(id, { weight, length, breadth, height, pickupLocation });
+        if (!result) {
+            return res.status(400).json({ success: false, message: 'Failed to book shipment on Shiprocket. Please verify address/pincode.' });
+        }
+        return res.status(200).json({
+            success: true,
+            message: 'Shipment successfully booked on Shiprocket!',
+            tracking: result
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+export const updateOrderShippingAddress = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        const address = await orderService.updateShippingAddress(id, req.body);
+        return res.status(200).json({
+            success: true,
+            message: 'Shipping address updated successfully',
+            address
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+export const getManualShippingRates = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        const { weight = 0.5, pickupLocation = 'Primary' } = req.body;
+
+        const order = await Order.findByPk(id, {
+            include: [{ model: OrderShippingAddress, as: 'shippingAddress' }]
+        });
+
+        if (!order || !order.shippingAddress) {
+            return res.status(404).json({ success: false, message: 'Order or shipping address not found' });
+        }
+
+        const pickupPincode = pickupLocation === 'Primary' 
+            ? (process.env.STORE_PICKUP_PINCODE || '734001')
+            : (process.env.STORE_WAREHOUSE_PINCODE || '734001');
+
+        const deliveryPincode = order.shippingAddress.postal_code;
+
+        console.log(`[Admin Rate Query] pickup=${pickupPincode}, delivery=${deliveryPincode}, weight=${weight}kg`);
+
+        const rates = await shiprocketService.getShippingRates({
+            weight: parseFloat(weight) || 0.5,
+            pickupPincode,
+            deliveryPincode
+        });
+
+        return res.status(200).json({
+            success: true,
+            rates: rates || []
+        });
+    } catch (error) {
+        console.error("[Admin Rate Query Error]:", error.message);
+        return res.status(400).json({ 
+            success: false, 
+            message: `Failed to fetch shipping rates: ${error.message}` 
+        });
+    }
+};
+
+export const getPickupLocationsList = async (req, res, next) => {
+    try {
+        const locations = await shiprocketService.getPickupLocations();
+        return res.status(200).json({
+            success: true,
+            locations: locations || []
+        });
+    } catch (error) {
+        console.error("[Admin Pickup Locations Query Error]:", error.message);
+        return res.status(400).json({ 
+            success: false, 
+            message: `Failed to fetch pickup locations: ${error.message}` 
+        });
     }
 };
 

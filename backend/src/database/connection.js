@@ -49,13 +49,15 @@ export const connectDB = async () => {
         console.log('✅ Database connection established successfully.');
 
         // Run migrations programmatically on startup (essential for production auto-deployment)
-        try {
-            console.log('🔄 Running database migrations on startup...');
-            const { stdout, stderr } = await execAsync('npx sequelize-cli db:migrate');
-            if (stdout) console.log('Migration output:\n', stdout);
-            if (stderr) console.warn('Migration warnings:\n', stderr);
-        } catch (migErr) {
-            console.error('❌ Failed to run database migrations on startup:', migErr.message);
+        if (config.env === 'production') {
+            try {
+                console.log('🔄 Running database migrations on startup...');
+                const { stdout, stderr } = await execAsync('npx sequelize-cli db:migrate');
+                if (stdout) console.log('Migration output:\n', stdout);
+                if (stderr) console.warn('Migration warnings:\n', stderr);
+            } catch (migErr) {
+                console.error('❌ Failed to run database migrations on startup:', migErr.message);
+            }
         }
 
         if (config.env === 'development') {

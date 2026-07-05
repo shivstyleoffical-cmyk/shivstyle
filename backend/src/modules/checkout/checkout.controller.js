@@ -1018,7 +1018,6 @@ export const getMagicPromotions = async (req, res, next) => {
         });
 
         responseData = {
-            success: true,
             promotions
         };
         console.log("GET PROMOTIONS REQUEST HEADERS:", req.headers);
@@ -1064,7 +1063,6 @@ export const applyMagicPromotion = async (req, res, next) => {
 
         if (!order_id) {
             responseData = {
-                success: false,
                 error: {
                     code: 'BAD_REQUEST_ERROR',
                     description: 'Order ID is required',
@@ -1091,7 +1089,6 @@ export const applyMagicPromotion = async (req, res, next) => {
         if (!order) {
             console.warn(`[Magic Checkout] Order not found for Razorpay Order ID / reference: ${order_id}`);
             responseData = {
-                success: false,
                 error: {
                     code: 'BAD_REQUEST_ERROR',
                     description: 'Order not found',
@@ -1139,13 +1136,9 @@ export const applyMagicPromotion = async (req, res, next) => {
             await order.save();
 
             responseData = {
-                success: true,
-                discount_amount: discountInPaise,
-                amount: discountInPaise,
-                message: `${validation.code} applied successfully`,
                 promotion: {
                     reference_id: validation.code,
-                    type: 'coupon',
+                    type: 'offer',
                     code: validation.code,
                     value: discountInPaise,
                     value_type: 'fixed_amount',
@@ -1167,7 +1160,6 @@ export const applyMagicPromotion = async (req, res, next) => {
             await order.save();
 
             responseData = {
-                success: false,
                 error: {
                     code: 'BAD_REQUEST_ERROR',
                     description: validationErr.message || 'Invalid coupon code',
@@ -1184,7 +1176,6 @@ export const applyMagicPromotion = async (req, res, next) => {
     } catch (error) {
         console.error('[Magic Checkout] Apply Promotion error:', error);
         responseData = {
-            success: false,
             error: {
                 code: 'SERVER_ERROR',
                 description: 'Internal server error processing coupon',

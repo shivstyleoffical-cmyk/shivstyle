@@ -1047,14 +1047,20 @@ export const getMagicPromotions = async (req, res, next) => {
                 : Math.round(parseFloat(offer.discount_value) * 100);
 
             promotions.push({
+                id: offer.code,
                 code: offer.code,
                 summary: `${displayValue} Off`,
-                description: offer.description || `Get ${displayValue} discount on your order using code ${offer.code}.`
+                description: offer.description || `Get ${displayValue} discount on your order using code ${offer.code}.`,
+                value_type: valueType,
+                value: value,
+                type: 'discount'
             });
         }
 
         responseData = {
-            promotions
+            success: true,
+            promotions,
+            promotion: promotions
         };
         console.log("GET PROMOTIONS REQUEST HEADERS:", req.headers);
         console.log("GET PROMOTIONS REQUEST BODY:", req.body);
@@ -1065,7 +1071,9 @@ export const getMagicPromotions = async (req, res, next) => {
     } catch (error) {
         console.error('[Magic Checkout] Get Promotions error:', error);
         responseData = {
-            promotions: []
+            success: true,
+            promotions: [],
+            promotion: []
         };
         await logToDb('/api/checkout/promotions', req.method, req.headers, req.body, responseData);
         return res.status(200).json(responseData);

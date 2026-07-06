@@ -1004,18 +1004,58 @@ export const getMagicPromotions = async (req, res, next) => {
             where: { status: 'active' }
         });
 
-        const promotions = activeOffers.map(offer => {
+        const body = req.body || {};
+        const query = req.query || {};
+        // Extract order ID with all possible keys (crucial for Razorpay custom integrations)
+        const order_id = body.order_id || body.razorpay_order_id || body.reference_id || query.order_id || query.razorpay_order_id || query.reference_id;
+
+        let order = null;
+        if (order_id) {
+            order = await Order.findOne({
+                where: {
+                    [Op.or]: [
+                        { payment_transaction_id: order_id },
+                        { order_number: order_id }
+                    ]
+                }
+            });
+        }
+
+        const promotions = [];
+        for (const offer of activeOffers) {
+            // Check expiry dates
+            const now = new Date();
+            if (now < new Date(offer.start_date) || now > new Date(offer.end_date)) {
+                continue;
+            }
+            // Check usage limit
+            if (offer.usage_limit && offer.used_count >= offer.usage_limit) {
+                continue;
+            }
+            // If order context is present, check minimum order amount
+            if (order && parseFloat(order.total_amount) < parseFloat(offer.min_order_amount)) {
+                continue;
+            }
+
             const displayValue = offer.discount_type === 'percentage'
                 ? `${parseFloat(offer.discount_value)}%`
                 : `₹${parseFloat(offer.discount_value)}`;
 
-            return {
+            const valueType = offer.discount_type === 'percentage' ? 'percentage' : 'fixed_amount';
+            const value = offer.discount_type === 'percentage'
+                ? parseFloat(offer.discount_value)
+                : Math.round(parseFloat(offer.discount_value) * 100);
+
+            promotions.push({
                 id: offer.code,
                 code: offer.code,
                 summary: `${displayValue} Off`,
-                description: offer.description || `Get ${displayValue} discount on your order using code ${offer.code}.`
-            };
-        });
+                description: offer.description || `Get ${displayValue} discount on your order using code ${offer.code}.`,
+                value_type: valueType,
+                value: value,
+                type: 'discount'
+            });
+        }
 
         responseData = {
             promotions

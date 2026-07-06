@@ -61,6 +61,7 @@ interface Product {
   care_instructions?: string;
   fit?: string;
   country_of_origin?: string;
+  stock_quantity?: number;
 }
 
 const ProductDetailsPage: React.FC = () => {
@@ -253,9 +254,10 @@ const ProductDetailsPage: React.FC = () => {
     );
   }
 
-  // Calculate price dynamically based on selection adjustments if any
+  // Calculate price and stock dynamically based on selection adjustments if any
   let displayPrice = Number(product.price);
   let selectedVariantId: string | undefined = undefined;
+  let currentStock = product.stock_quantity !== undefined ? Number(product.stock_quantity) : 0;
 
   if (product.variants && product.variants.length > 0) {
     // Look for matching variant
@@ -265,8 +267,13 @@ const ProductDetailsPage: React.FC = () => {
     if (matched) {
       displayPrice = matched.price;
       selectedVariantId = matched.id;
+      currentStock = matched.stock_quantity !== undefined ? Number(matched.stock_quantity) : 0;
+    } else {
+      currentStock = 0;
     }
   }
+
+  const isOutOfStock = currentStock <= 0;
 
   const isOnSale = product.is_on_sale ||
     (product.original_price &&
@@ -599,7 +606,14 @@ const ProductDetailsPage: React.FC = () => {
                   </>
                 )}
               </div>
-              <p className="text-[11px] text-gray-500 mt-2 font-medium uppercase tracking-wider">Tax included. Shipping calculated at checkout.</p>
+              {isOutOfStock ? (
+                <p className="text-xs font-extrabold text-red-600 mt-2.5 uppercase tracking-wider flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-red-600 animate-pulse"></span>
+                  Out of Stock
+                </p>
+              ) : (
+                <p className="text-[11px] text-gray-500 mt-2 font-medium uppercase tracking-wider">Tax included. Shipping calculated at checkout.</p>
+              )}
             </div>
 
             {/* Validation Message */}
@@ -675,17 +689,19 @@ const ProductDetailsPage: React.FC = () => {
               {/* Quantity Selection */}
               <div>
                 <span className="text-xs font-bold uppercase tracking-wider text-black block mb-3">Quantity</span>
-                <div className="flex items-center border border-zinc-200 rounded-full w-32 justify-between px-1.5 py-1">
+                <div className={`flex items-center border border-zinc-200 rounded-full w-32 justify-between px-1.5 py-1 ${isOutOfStock ? 'opacity-50' : ''}`}>
                   <button
+                    disabled={isOutOfStock}
                     onClick={() => setQuantity(prev => Math.max(1, prev - 1))}
-                    className="w-8 h-8 rounded-full flex items-center justify-center text-zinc-400 hover:text-black hover:bg-zinc-50 transition-colors"
+                    className="w-8 h-8 rounded-full flex items-center justify-center text-zinc-400 hover:text-black hover:bg-zinc-50 transition-colors disabled:pointer-events-none"
                   >
                     <Minus size={12} />
                   </button>
-                  <span className="text-xs font-bold text-black">{quantity}</span>
+                  <span className="text-xs font-bold text-black">{isOutOfStock ? 0 : quantity}</span>
                   <button
+                    disabled={isOutOfStock}
                     onClick={() => setQuantity(prev => prev + 1)}
-                    className="w-8 h-8 rounded-full flex items-center justify-center text-zinc-400 hover:text-black hover:bg-zinc-50 transition-colors"
+                    className="w-8 h-8 rounded-full flex items-center justify-center text-zinc-400 hover:text-black hover:bg-zinc-50 transition-colors disabled:pointer-events-none"
                   >
                     <Plus size={12} />
                   </button>
@@ -698,21 +714,31 @@ const ProductDetailsPage: React.FC = () => {
             <div className="flex flex-col gap-3 mb-8">
               <div className="flex gap-3">
                 <button
+                  disabled={isOutOfStock}
                   onClick={handleAddToBag}
-                  className="flex-grow bg-transparent hover:bg-zinc-50 text-black border border-black transition-all duration-300 text-xs font-bold uppercase tracking-widest py-4 rounded-full flex items-center justify-center space-x-3"
+                  className={`flex-grow bg-transparent text-black border transition-all duration-300 text-xs font-bold uppercase tracking-widest py-4 rounded-full flex items-center justify-center space-x-3 ${
+                    isOutOfStock 
+                      ? 'border-zinc-200 text-zinc-400 bg-zinc-50 cursor-not-allowed' 
+                      : 'border-black hover:bg-zinc-50'
+                  }`}
                 >
                   <ShoppingBag size={16} />
-                  <span>Add to Bag</span>
+                  <span>{isOutOfStock ? 'Out of Stock' : 'Add to Bag'}</span>
                 </button>
                 <button className="border border-zinc-200 hover:border-black hover:bg-zinc-50 text-black transition-colors px-6 py-4 rounded-full flex items-center justify-center">
                   <Heart size={18} />
                 </button>
               </div>
               <button
+                disabled={isOutOfStock}
                 onClick={handleBuyItNow}
-                className="w-full bg-[#B91C1C] text-white hover:bg-[#A11717] transition-all duration-300 text-xs font-bold uppercase tracking-widest py-4 rounded-full flex items-center justify-center shadow-lg shadow-red-700/10"
+                className={`w-full transition-all duration-300 text-xs font-bold uppercase tracking-widest py-4 rounded-full flex items-center justify-center ${
+                  isOutOfStock
+                    ? 'bg-zinc-200 text-zinc-400 cursor-not-allowed'
+                    : 'bg-[#B91C1C] text-white hover:bg-[#A11717] shadow-lg shadow-red-700/10'
+                }`}
               >
-                Buy It Now
+                {isOutOfStock ? 'Out of Stock' : 'Buy It Now'}
               </button>
             </div>
 

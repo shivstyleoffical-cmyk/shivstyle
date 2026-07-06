@@ -1058,7 +1058,9 @@ export const getMagicPromotions = async (req, res, next) => {
         }
 
         responseData = {
-            promotions
+            success: true,
+            promotions,
+            promotion: promotions
         };
         console.log("GET PROMOTIONS REQUEST HEADERS:", req.headers);
         console.log("GET PROMOTIONS REQUEST BODY:", req.body);
@@ -1068,7 +1070,11 @@ export const getMagicPromotions = async (req, res, next) => {
         return res.status(200).json(responseData);
     } catch (error) {
         console.error('[Magic Checkout] Get Promotions error:', error);
-        responseData = { promotions: [] };
+        responseData = {
+            success: true,
+            promotions: [],
+            promotion: []
+        };
         await logToDb('/api/checkout/promotions', req.method, req.headers, req.body, responseData);
         return res.status(200).json(responseData);
     }
@@ -1153,7 +1159,9 @@ export const applyMagicPromotion = async (req, res, next) => {
 
             responseData = {
                 success: true,
-                message: 'Coupon removed successfully'
+                message: 'Coupon removed successfully',
+                promotion: null,
+                promotions: []
             };
             console.log("APPLY PROMOTION RESPONSE BODY (coupon removed):", responseData);
             res.setHeader('Content-Type', 'application/json');
@@ -1175,15 +1183,19 @@ export const applyMagicPromotion = async (req, res, next) => {
             order.net_amount = order.gross_amount + parseFloat(order.shipping_amount);
             await order.save();
 
+            const promotionObj = {
+                reference_id: validation.code,
+                type: 'offer',
+                code: validation.code,
+                value: discountInPaise,
+                value_type: 'fixed_amount',
+                description: `${validation.code} applied successfully`
+            };
+
             responseData = {
-                promotion: {
-                    reference_id: validation.code,
-                    type: 'offer',
-                    code: validation.code,
-                    value: discountInPaise,
-                    value_type: 'fixed_amount',
-                    description: `${validation.code} applied successfully`
-                }
+                success: true,
+                promotion: promotionObj,
+                promotions: [promotionObj]
             };
             console.log("APPLY PROMOTION RESPONSE BODY:", responseData);
             res.setHeader('Content-Type', 'application/json');

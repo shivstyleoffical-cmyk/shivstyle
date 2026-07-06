@@ -470,14 +470,29 @@ class UserService {
         const { page = 1, limit = 10, role, search, is_verified } = params;
         const offset = (page - 1) * limit;
 
-        const where = {};
+        const { Op } = await import('sequelize');
+
+        // Only return users who have completed registration or actually placed a guest order
+        // (i.e. they must have either an email or a phone number populated)
+        const where = {
+            [Op.and]: [
+                {
+                    [Op.or]: [
+                        { email: { [Op.ne]: null } },
+                        { phone: { [Op.ne]: null } }
+                    ]
+                }
+            ]
+        };
+
         if (search) {
-            const { Op } = await import('sequelize');
-            where[Op.or] = [
-                { name: { [Op.iLike]: `%${search}%` } },
-                { email: { [Op.iLike]: `%${search}%` } },
-                { phone: { [Op.iLike]: `%${search}%` } }
-            ];
+            where[Op.and].push({
+                [Op.or]: [
+                    { name: { [Op.iLike]: `%${search}%` } },
+                    { email: { [Op.iLike]: `%${search}%` } },
+                    { phone: { [Op.iLike]: `%${search}%` } }
+                ]
+            });
         }
         if (is_verified !== undefined && is_verified !== null && is_verified !== '') {
             where.is_verified = is_verified === 'true' || is_verified === true;

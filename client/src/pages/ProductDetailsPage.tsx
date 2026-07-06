@@ -727,9 +727,10 @@ const ProductDetailsPage: React.FC = () => {
                   <Plus size={12} className={`transition-transform ${activeAccordion === 'description' ? 'rotate-45' : ''}`} />
                 </button>
                 {activeAccordion === 'description' && (
-                  <div className="mt-2 text-xs leading-relaxed text-gray-500 font-medium">
-                    {product.description || "No description available for this premium ShivaStyle garment."}
-                  </div>
+                  <div 
+                    className="mt-2 text-xs leading-relaxed text-gray-500 font-medium description-content"
+                    dangerouslySetInnerHTML={{ __html: product.description || "No description available for this premium ShivaStyle garment." }}
+                  />
                 )}
               </div>
 

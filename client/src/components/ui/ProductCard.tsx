@@ -15,6 +15,7 @@ interface Product {
   is_featured?: boolean;
   is_on_sale?: boolean;
   url_slug: string;
+  stock_quantity?: number;
 }
 
 interface ProductCardProps {
@@ -46,9 +47,20 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
                     !isNaN(Number(product.original_price)) && 
                     Number(product.original_price) > Number(product.price));
 
+  const isOutOfStock = product.stock_quantity !== undefined && Number(product.stock_quantity) <= 0;
+
   return (
     <Link to={`/product/${product.url_slug}`} className="group cursor-pointer flex flex-col">
       <div className="relative aspect-[3/4] overflow-hidden bg-gray-100 mb-4 rounded-xl border border-gray-100 shadow-sm">
+        {/* Out of Stock Overlay */}
+        {isOutOfStock && (
+          <div className="absolute inset-0 bg-black/45 backdrop-blur-[1px] flex items-center justify-center z-10 transition-all duration-300">
+            <span className="bg-red-600 text-white font-extrabold text-[10px] uppercase tracking-[0.2em] px-4 py-2 rounded-sm shadow-md border border-red-500">
+              Out of Stock
+            </span>
+          </div>
+        )}
+
         {/* Badges */}
         <div className="absolute top-3 left-3 z-10">
           {isOnSale ? (
@@ -87,15 +99,17 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
         />
 
         {/* Quick Add Button */}
-        <div className="absolute bottom-0 left-0 right-0 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-in-out">
-          <button 
-            onClick={handleAddToBag}
-            className="w-full bg-black/90 backdrop-blur-md text-white hover:bg-brand-secondary font-bold text-[11px] uppercase tracking-widest py-3.5 flex items-center justify-center space-x-2 transition-colors"
-          >
-            <ShoppingBag size={14} />
-            <span>Add to Bag</span>
-          </button>
-        </div>
+        {!isOutOfStock && (
+          <div className="absolute bottom-0 left-0 right-0 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-in-out">
+            <button 
+              onClick={handleAddToBag}
+              className="w-full bg-black/90 backdrop-blur-md text-white hover:bg-brand-secondary font-bold text-[11px] uppercase tracking-widest py-3.5 flex items-center justify-center space-x-2 transition-colors"
+            >
+              <ShoppingBag size={14} />
+              <span>Add to Bag</span>
+            </button>
+          </div>
+        )}
 
       </div>
 

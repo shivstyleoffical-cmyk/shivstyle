@@ -424,7 +424,7 @@ const ProductDetailsPage: React.FC = () => {
       }
     } catch (err: any) {
       console.error("Checkout initiation error:", err);
-      setValidationError('Failed to connect to checkout gateway');
+      setValidationError(err.response?.data?.message || 'Failed to connect to checkout gateway');
       setLoading(false);
     }
   };

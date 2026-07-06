@@ -58,6 +58,13 @@ export const connectDB = async () => {
             } catch (migErr) {
                 console.error('❌ Failed to run database migrations on startup:', migErr.message);
             }
+            try {
+                console.log('🔄 Syncing database models in production...');
+                await sequelize.sync({ force: false });
+                console.log('ℹ️  DB Synced successfully for production mode.');
+            } catch (syncErr) {
+                console.error('❌ Failed to sync database models in production:', syncErr.message);
+            }
         }
 
         if (config.env === 'development') {

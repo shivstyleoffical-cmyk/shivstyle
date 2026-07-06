@@ -208,6 +208,53 @@ export const sendOrderShippedEmail = async (orderId) => {
  */
 export const initiateCheckout = async (req, res, next) => {
     try {
+        // Clean up orphaned guest users and pending checkouts older than 30 minutes to prevent DB clutter
+        try {
+            const expiryTime = new Date(Date.now() - 30 * 60 * 1000); // 30 minutes ago
+            const oldOrders = await Order.findAll({
+                where: {
+                    payment_status: 'not_paid',
+                    createdAt: { [Op.lt]: expiryTime }
+                }
+            });
+
+            if (oldOrders.length > 0) {
+                const orderIds = oldOrders.map(o => o.id);
+                const userIds = oldOrders.map(o => o.user_id);
+
+                await Order.sequelize.transaction(async (t) => {
+                    await OrderShippingAddress.destroy({
+                        where: { order_id: { [Op.in]: orderIds } },
+                        transaction: t
+                    });
+                    await OrderItem.destroy({
+                        where: { order_id: { [Op.in]: orderIds } },
+                        transaction: t
+                    });
+                    await Order.destroy({
+                        where: { id: { [Op.in]: orderIds } },
+                        transaction: t
+                    });
+
+                    for (const userId of userIds) {
+                        const guestUser = await User.findByPk(userId, { transaction: t });
+                        if (guestUser && !guestUser.email && !guestUser.phone) {
+                            const otherOrdersCount = await Order.count({
+                                where: { user_id: userId },
+                                transaction: t
+                            });
+                            if (otherOrdersCount === 0) {
+                                await guestUser.destroy({ transaction: t });
+                            }
+                        }
+                    }
+                });
+                console.log(`[Checkout Cleanup] Cleaned up ${oldOrders.length} orphaned guest checkout sessions.`);
+            }
+        } catch (cleanupErr) {
+            console.error("[Checkout Cleanup] Failed to clean up orphaned sessions:", cleanupErr.message);
+        }
+
         const { items } = req.body;
 
         if (!items || !Array.isArray(items) || items.length === 0) {
